@@ -107,7 +107,7 @@ Right now, VibeGit focuses on `commit`. But the vision is grand! Imagine AI assi
 *   `vibegit rebase` (Interactive rebasing suggestions?)
 *   `vibegit checkout` (Suggesting relevant branches?)
 
-We're aiming to turn this quirky tool into a full-fledged AI Git companion. Maybe even a **commercial service** one day, so get in on the ground floor while it's still just charmingly experimental!
+We're aiming to turn this quirky tool into a full-fledged AI Git companion.
 
 ## Contributing (Please Help Us Vibe Better!)
 
