@@ -77,23 +77,21 @@ Via pip:
 pip install vibegit
 ```
 
-**Run as tool without explicit installation:**
+Via pipx:
 
-Via uv:
+```
+pipx install vibegit
+```
+
+**Run as tool without explicit installation with uv:**
 
 ```
 uvx vibegit
 ```
 
-Via pipx:
-
-```
-pipx vibegit
-```
-
 ### Configuration
 
-Before your first vibe git'ing session, you may have to configure VibeGit. This can be done with the `vibegit config set <path> <value>`. You will most likely have to provide your LLM API key. Since Google's Gemini models are used by default, set `api_keys.google_api_key` to your API key:
+Before your first vibe git'ing session, you may have to configure VibeGit. This can be done with the `vibegit config set <path> <value>` CLI command. You will most likely have to provide your LLM API key. Google's Gemini models are used by default, so you have will to set `api_keys.google_api_key` to your API key:
 
 ```bash
 vibegit config set api_keys.google_api_key <your-secret-api-key>
