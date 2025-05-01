@@ -64,6 +64,11 @@ VibeGit analyzes your diff, considers your branch name, peeks at your recent com
 
 ## Setup: Get Ready to Vibe
 
+### Requirements
+
+* A computer
+* Python>=3.10
+
 ### Installation
 
 Via pip:
