@@ -20,7 +20,7 @@ Spend more time vibe coding and less time cleaning your messy git repository.
 
 ## Never ever do manual Git housekeeping again
 
-Let's be honest. You know the problem. You spent hours or days working on a feature and forgot to group and commit changes once in a while. Suddenly you are facing 30 open file changes, scattered across a dozen or so different subtasks.
+Let's be honest. You know the problem. You spent hours or days working on a feature and forgot to group and commit changes once in a while. Suddenly you are facing 30 open file changes, related to a dozen or so different subtasks.
 
 Now comes the fun part: **Crafting perfect, atomic commits.**
 
