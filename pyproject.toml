@@ -1,9 +1,9 @@
 [project]
 name = "vibegit"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "Group and commit semantically related open changes automagically with AI."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "click>=8.1.8",
     "diff-parser>=1.1",
