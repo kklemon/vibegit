@@ -1,0 +1,3 @@
+Use all-lowercase commit messages without a tag prefix, e.g. "add feature for better vibin'".
+
+Make the commits relatively small and decompose them on semantic and logical level.

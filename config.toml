@@ -1,0 +1,5 @@
+[api_keys]
+# Provide API keys in dotenv format.
+# These will be injected as env variables.
+# Example:
+GOOGLE_API_KEY="sk-<your-api-key>"
