@@ -60,7 +60,7 @@ VibeGit analyzes your diff, considers your branch name, peeks at your recent com
     *   **YOLO Mode:** Feeling lucky? Automatically apply all of VibeGit's proposals. What could possibly go wrong?
     *   **Interactive Mode:** Review each proposed commit, edit the message in your default editor, and apply them one by one. For the cautious (or skeptical).
     *   **Summary Mode:** Get a quick overview of what VibeGit plans to do before diving in.
-*   🚫 **Sanity Check (WIP):** Checks whether you didn't accidentally forgot your life pension in the form of a Bitcoin key in your `.env` file. 
+*   🚫 **Sanity Check (coming soon™):** Checks whether you didn't accidentally forgot your life pension in form of a Bitcoin key in your `.env` file. 
 
 ## Setup: Get Ready to Vibe
 
