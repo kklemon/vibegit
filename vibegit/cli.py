@@ -81,7 +81,10 @@ def display_summary(
 
     console.print(table)
 
-    if isinstance(proposals, IncompleteCommitProposalListSchema):
+    if (
+        isinstance(proposals, IncompleteCommitProposalListSchema)
+        and proposals.exclude.change_ids
+    ):
         console.print()
 
         table = Table(title="Excluded Changes")
