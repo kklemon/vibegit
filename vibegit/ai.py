@@ -1,19 +1,29 @@
 from typing import cast
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from vibegit.git import CommitProposalContext, GitContextFormatter
-from vibegit.prompts import COMMIT_PROPOSAL_SYSTEM_PROMPT
-from vibegit.schemas import CommitGroupingProposal
+from vibegit.prompts import build_system_prompt
+from vibegit.schemas import CommitProposalListSchema, IncompleteCommitProposalListSchema
 
 
 class CommitProposalAI:
-    def __init__(self, model: BaseChatModel):
-        self.model = model.with_structured_output(CommitGroupingProposal)
+    def __init__(self, model: BaseChatModel, allow_excluding_changes: bool = False):
+        schema = (
+            IncompleteCommitProposalListSchema
+            if allow_excluding_changes
+            else CommitProposalListSchema
+        )
+        self.model = model.with_structured_output(schema)
+        self.allow_excluding_changes = allow_excluding_changes
 
-    async def propose_commits(self, context: str) -> CommitGroupingProposal | None:
+    async def propose_commits(
+        self, context: str
+    ) -> CommitProposalListSchema | IncompleteCommitProposalListSchema | None:
         result = await self.model.ainvoke(
             [
-                {"role": "system", "content": COMMIT_PROPOSAL_SYSTEM_PROMPT},
+                {
+                    "role": "system",
+                    "content": build_system_prompt(self.allow_excluding_changes),
+                },
                 {"role": "user", "content": context},
             ]
         )
@@ -21,4 +31,7 @@ class CommitProposalAI:
         if result is None:
             return None
 
-        return cast(CommitGroupingProposal, result)
+        if self.allow_excluding_changes:
+            return cast(IncompleteCommitProposalListSchema, result)
+        else:
+            return cast(CommitProposalListSchema, result)
