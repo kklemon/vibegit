@@ -6,8 +6,7 @@ import tempfile
 
 import git
 from unidiff import Hunk, PatchedFile, PatchSet
-
-from vibegit.schemas import CommitGroupingProposal
+from vibegit.schemas import CommitGroupingProposal, CommitProposal
 
 
 @dataclass
@@ -126,7 +125,7 @@ class CommitProposalContext:
                     )
                 hunk_ids.add(hunk_id)
 
-    def stage_commit_proposal(self, commit_proposal: CommitGroupingProposal):
+    def stage_commit_proposal(self, commit_proposal: CommitProposal):
         # Dereference the hunks
         hunk_file_refs = [
             self.hunk_id_to_hunk[hunk_id] for hunk_id in commit_proposal.hunk_ids
@@ -182,7 +181,7 @@ class CommitProposalContext:
                     print(f"Error staging file: {patched_file}. Patch file: {f.name}")
                     raise e
 
-    def commit_commit_proposal(self, commit_proposal: CommitGroupingProposal):
+    def commit_commit_proposal(self, commit_proposal: CommitProposal):
         self.git_status.repo.git.commit("-m", commit_proposal.commit_message)
 
 
@@ -203,7 +202,7 @@ class GitContextFormatter:
 
     def _truncate_line(self, line: str) -> str:
         truncated_line = line[: self.truncate_lines]
-        if len(line) > self.truncate_lines:
+        if self.truncate_lines and len(line) > self.truncate_lines:
             truncated_line += "..."
         return truncated_line
 
@@ -221,9 +220,10 @@ class GitContextFormatter:
             patch_info_lines[0] = (
                 f"{patch_info_lines[0]}  # Hunk ID: {ctx.hunk_counter}"
             )
+
             ctx.hunk_counter += 1
             ctx.hunk_id_to_hunk[hunk_id] = HunkFileReference(
-                diff, list(diff.patched_file)
+                diff, None
             )
 
             result = "\n".join(

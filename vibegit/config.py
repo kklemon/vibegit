@@ -7,15 +7,14 @@ import toml
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings as _BaseSettings
 from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
-    TomlConfigSettingsSource
+    TomlConfigSettingsSource,
 )
-from pydantic_settings import BaseSettings as _BaseSettings
 
 from vibegit.git import GitContextFormatter
-
 
 CONFIG_PATH = Path(platformdirs.user_config_dir("vibegit")) / "config.toml"
 
@@ -28,15 +27,17 @@ class BaseSettings(_BaseSettings):
 
         if not remaining_parts:
             return current_value
-        
+
         if isinstance(current_value, dict):
             if len(remaining_parts) != 1:
-                raise ValueError(f"Expected exactly one remaining part, got {len(remaining_parts)}")
+                raise ValueError(
+                    f"Expected exactly one remaining part, got {len(remaining_parts)}"
+                )
             return current_value.get(remaining_parts[0])
-        
+
         if isinstance(current_value, BaseSettings):
             return current_value.get_by_path(remaining_parts[0])
-        
+
         raise ValueError(f"Expected a BaseSettings or dict, got {type(current_value)}")
 
     def set_by_path(self, path: str, value: Any):
@@ -57,7 +58,7 @@ class BaseSettings(_BaseSettings):
         try:
             current_attribute = getattr(self, current_part)
         except AttributeError:
-             raise AttributeError(
+            raise AttributeError(
                 f"'{type(self).__name__}' object has no attribute '{current_part}'"
             )
 
@@ -68,12 +69,13 @@ class BaseSettings(_BaseSettings):
             dict_key = remaining_parts[0]
             current_attribute[dict_key] = value
             # Re-assign to potentially trigger Pydantic updates if needed
-            setattr(self, current_part, current_attribute) 
+            setattr(self, current_part, current_attribute)
         else:
             raise TypeError(
                 f"Cannot set path '{path}'. Attribute '{current_part}' is neither a "
                 f"BaseSettings instance nor a dict, but {type(current_attribute)}"
             )
+
 
 class ContextFormattingConfig(BaseSettings):
     include_active_branch: bool = True
@@ -112,7 +114,7 @@ class Config(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: type[BaseSettings],
+        settings_cls: type[_BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,

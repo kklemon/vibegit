@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import click
 import git
-import inquirer  # type: ignore
+import inquirer
 from rich import print as pprint
 from rich.console import Console
 

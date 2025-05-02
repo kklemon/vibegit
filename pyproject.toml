@@ -28,3 +28,23 @@ vibegit = "vibegit.cli:cli"
 
 [tool.setuptools]
 packages = ["vibegit"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15.0",
+    "types-toml>=0.10.8.20240310",
+]
+
+[tool.mypy]
+check_untyped_defs = true
+#disallow_any_unimported = true
+#disallow_untyped_defs = true # annoying
+no_implicit_optional = true
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_ignores = true
+show_error_codes = true
+strict_optional = false
+plugins = "pydantic.mypy"
+
+exclude = ["build"]
