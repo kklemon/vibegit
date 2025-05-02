@@ -599,6 +599,13 @@ def config_cli(ctx):
 
 
 @config_cli.command()
+def open():
+    import subprocess
+
+    subprocess.run(["open", config.config_path])
+
+
+@config_cli.command()
 @click.argument("path", type=str)
 def get(path: str):
     pprint(config.get_by_path(path))
