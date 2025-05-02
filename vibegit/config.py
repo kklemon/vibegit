@@ -97,7 +97,7 @@ class Config(BaseSettings):
     model_name: str = "google_genai:gemini-2.5-flash-preview-04-17"
     context_formatting: ContextFormattingConfig = ContextFormattingConfig()
     api_keys: dict[str, str] = Field(default_factory=dict)
-
+    allow_excluding_changes: bool = True
     model_config = SettingsConfigDict(toml_file=CONFIG_PATH)
 
     @model_validator(mode="after")
