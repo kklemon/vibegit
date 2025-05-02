@@ -92,11 +92,6 @@ class ContextFormattingConfig(BaseSettings):
             user_instructions=user_instructions,
         )
 
-    def save_config(self):
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_PATH, "w") as f:
-            toml.dump(self.model_dump(), f)
-
 
 class Config(BaseSettings):
     model_name: str = "google_genai:gemini-2.5-flash-preview-04-17"
@@ -126,9 +121,13 @@ class Config(BaseSettings):
         return init_chat_model(self.model_name)
 
     def save_config(self):
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_PATH, "w") as f:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.config_path, "w") as f:
             toml.dump(self.model_dump(), f)
+
+    @property
+    def config_path(self) -> Path:
+        return CONFIG_PATH
 
 
 config = Config()
