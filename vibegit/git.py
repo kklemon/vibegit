@@ -6,7 +6,7 @@ import tempfile
 
 import git
 from unidiff import Hunk, PatchedFile, PatchSet
-from vibegit.schemas import CommitGroupingProposal, CommitProposal
+from vibegit.schemas import CommitProposalListSchema, CommitProposalSchema
 
 
 @dataclass
@@ -106,7 +106,7 @@ class CommitProposalContext:
     change_counter: int = 0
     change_id_to_ref: dict[int, FileChangeReference] = field(default_factory=dict)
 
-    def validate_commit_proposal(self, commit_proposals: CommitGroupingProposal):
+    def validate_commit_proposal(self, commit_proposals: CommitProposalListSchema):
         # First, verify that all referenced changes exist
         for proposal in commit_proposals.commit_proposals:
             for change_id in proposal.change_ids:
@@ -125,7 +125,7 @@ class CommitProposalContext:
                     )
                 change_ids.add(change_id)
 
-    def stage_commit_proposal(self, commit_proposal: CommitProposal):
+    def stage_commit_proposal(self, commit_proposal: CommitProposalSchema):
         # Dereference the changes
         change_file_refs = [
             self.change_id_to_ref[change_id] for change_id in commit_proposal.change_ids
@@ -181,7 +181,7 @@ class CommitProposalContext:
                     print(f"Error staging file: {patched_file}. Patch file: {f.name}")
                     raise e
 
-    def commit_commit_proposal(self, commit_proposal: CommitProposal):
+    def commit_commit_proposal(self, commit_proposal: CommitProposalSchema):
         self.git_status.repo.git.commit("-m", commit_proposal.commit_message)
 
 
