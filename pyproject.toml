@@ -3,7 +3,7 @@ name = "vibegit"
 version = "0.1.1"
 description = "Automagically group and commit semantically related changes in your Git repository with AI."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "click>=8.1.8",
     "diff-parser>=1.1",
