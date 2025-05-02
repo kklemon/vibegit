@@ -222,7 +222,9 @@ async def run_commit_workflow(repo: git.Repo):
 
     # 4. Get Commit Proposals from AI
     console.print("Generating commit proposals...")
-    ai = CommitProposalAI(config.get_chat_model(), allow_excluding_changes=config.allow_excluding_changes)
+    ai = CommitProposalAI(
+        config.get_chat_model(), allow_excluding_changes=config.allow_excluding_changes
+    )
     grouping_proposal: (
         CommitProposalListSchema | IncompleteCommitProposalListSchema | None
     ) = None
