@@ -1,3 +1,47 @@
+from typing import Literal
+
+
+COMPLETE_FORMAT_DESCRIPTION = """
+```json
+{
+  "commit_proposals": [
+    {
+      "reasoning": "Explanation for grouping changes X, Y, and Z.",
+      "commit_message": "Subject line summarizing changes in changes X, Y, Z\n\nOptional body providing more details.",
+      "change_ids": [X, Y, Z]
+    },
+    {
+      "reasoning": "Explanation for grouping changes A, B, and C.",
+      "commit_message": "Subject line summarizing changes in changes A, B, C\n\nOptional body providing more details.",
+      "change_ids": [A, B, C]
+    }
+    // ... more commit proposals as needed
+  ]
+}
+```
+""".strip()
+
+INCOMPLETE_FORMAT_DESCRIPTION = """
+```json
+{
+  "exclude": {
+    "reasoning": "Explanation for excluding changes X, Y, and Z.",
+    "change_ids": [X, Y, Z]
+  },
+  "commit_proposals": [
+    {
+      "reasoning": "Explanation for grouping changes A, B, and C.",
+      "commit_message": "Subject line summarizing changes in changes A, B, C\n\nOptional body providing more details.",
+      "change_ids": [A, B, C]
+    }
+    // ... more commit proposals as needed
+  ]
+}
+```
+
+If you identify changes that are not ready to be committed, for instance, because they are incomplete or contain obvious bugs, you should exclude them from the commit proposals by providing a `reasoning` and a list of `change_ids`.
+""".strip()
+
 COMMIT_PROPOSAL_SYSTEM_PROMPT = """
 You are an expert AI assistant specializing in Git version control and code analysis. Your primary goal is to analyze a given `git diff` of unstaged changes and propose a set of logically grouped commits. Each proposed commit should bundle semantically related changes (hunks).
 
