@@ -19,24 +19,10 @@ from vibegit.git import (
 )
 from vibegit.schemas import CommitGroupingProposal, CommitProposal
 
-# Initialize Rich Console
-try:
-    console = Console()
-except ImportError:
-    print("Rich library not found. Output formatting will be basic.")
-    print("Install with: pip install rich")
+# Temporary fix. See https://github.com/grpc/grpc/issues/37642
+os.environ["GRPC_VERBOSITY"] = "NONE"
 
-    # Basic print fallback
-    class BasicConsole:
-        def print(self, text, *args, **kwargs):
-            import re
-
-            text = re.sub(r"\[/?.*?\]", "", text)  # Basic tag stripping
-            print(text)
-
-    console = BasicConsole()  # type: ignore
-
-# --- Git Utility Functions ---
+console = Console()
 
 
 def has_staged_changes(repo: git.Repo) -> bool:
