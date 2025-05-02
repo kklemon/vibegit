@@ -95,60 +95,60 @@ def get_git_status(repo) -> GitStatusSummary:
 
 
 @dataclass
-class HunkFileReference:
+class FileChangeReference:
     file: FileDiff
-    hunk: Hunk
+    hunk: Hunk | None
 
 
 @dataclass
 class CommitProposalContext:
     git_status: GitStatusSummary
-    hunk_counter: int = 0
-    hunk_id_to_hunk: dict[int, HunkFileReference] = field(default_factory=dict)
+    change_counter: int = 0
+    change_id_to_ref: dict[int, FileChangeReference] = field(default_factory=dict)
 
     def validate_commit_proposal(self, commit_proposals: CommitGroupingProposal):
-        # First, verify that all referenced hunks exist
+        # First, verify that all referenced changes exist
         for proposal in commit_proposals.commit_proposals:
-            for hunk_id in proposal.hunk_ids:
-                if hunk_id not in self.hunk_id_to_hunk:
+            for change_id in proposal.change_ids:
+                if change_id not in self.change_id_to_ref:
                     raise ValueError(
-                        f"Hunk ID {hunk_id} not found in formatting context"
+                        f"Change ID {change_id} not found in formatting context"
                     )
 
-        # Then verify that each hunk is only included in one commit proposal
-        hunk_ids = set()
+        # Then verify that each change is only included in one commit proposal
+        change_ids = set()
         for proposal in commit_proposals.commit_proposals:
-            for hunk_id in proposal.hunk_ids:
-                if hunk_id in hunk_ids:
+            for change_id in proposal.change_ids:
+                if change_id in change_ids:
                     raise ValueError(
-                        f"Hunk ID {hunk_id} is included in multiple commit proposals"
+                        f"Change ID {change_id} is included in multiple commit proposals"
                     )
-                hunk_ids.add(hunk_id)
+                change_ids.add(change_id)
 
     def stage_commit_proposal(self, commit_proposal: CommitProposal):
-        # Dereference the hunks
-        hunk_file_refs = [
-            self.hunk_id_to_hunk[hunk_id] for hunk_id in commit_proposal.hunk_ids
+        # Dereference the changes
+        change_file_refs = [
+            self.change_id_to_ref[change_id] for change_id in commit_proposal.change_ids
         ]
 
         # Group by file
-        hunk_file_refs_by_file: dict[FileDiff, list[HunkFileReference]] = {}
+        file_change_refs_by_file: dict[FileDiff, list[FileChangeReference]] = {}
 
-        for hunk_file_ref in hunk_file_refs:
-            if hunk_file_ref.file.patched_file.is_binary_file:
-                assert hunk_file_refs_by_file.get(hunk_file_ref.file) is None, (
+        for change_file_ref in change_file_refs:
+            if change_file_ref.file.patched_file.is_binary_file:
+                assert file_change_refs_by_file.get(change_file_ref.file) is None, (
                     "Found more than one change for a binary file but expected only one"
                 )
-                hunk_file_refs_by_file[hunk_file_ref.file] = [hunk_file_ref]
+                file_change_refs_by_file[change_file_ref.file] = [change_file_ref]
             else:
-                hunk_file_refs_by_file.setdefault(hunk_file_ref.file, []).append(
-                    hunk_file_ref
+                file_change_refs_by_file.setdefault(change_file_ref.file, []).append(
+                    change_file_ref
                 )
 
-        # Create a new file with the hunks of each group
+        # Create a new file with the changes of each group
         files = []
 
-        for file_diff, group in hunk_file_refs_by_file.items():
+        for file_diff, group in file_change_refs_by_file.items():
             if file_diff.patched_file.is_binary_file:
                 assert len(group) == 1, (
                     "Binary files should only have one change by our logic"
@@ -161,10 +161,10 @@ class CommitProposalContext:
             patched_file = deepcopy(group[0].file.patched_file)
             patched_file.clear()
 
-            for hunk_file_ref in group:
-                if hunk_file_ref.hunk:
+            for change_file_ref in group:
+                if change_file_ref.hunk:
                     # Ensure the hunk ends with a newline
-                    patched_file.append(hunk_file_ref.hunk)
+                    patched_file.append(change_file_ref.hunk)
             files.append(patched_file)
 
         # Stage the files
@@ -210,21 +210,19 @@ class GitContextFormatter:
         diff = file.get_diff()
 
         if diff.patched_file.is_binary_file:
-            # If it's a binary file, add the hunk id to the first line
+            # If it's a binary file, add the change id to the first line
             # and use a placeholder for the content
-            hunk_id = ctx.hunk_counter
+            change_id = ctx.change_counter
 
             patch_info = diff.patched_file.patch_info
             assert patch_info is not None, "Expected patch info but found None"
             patch_info_lines = str(patch_info).splitlines()
             patch_info_lines[0] = (
-                f"{patch_info_lines[0]}  # Hunk ID: {ctx.hunk_counter}"
+                f"{patch_info_lines[0]}  # Change ID: {change_id}"
             )
 
-            ctx.hunk_counter += 1
-            ctx.hunk_id_to_hunk[hunk_id] = HunkFileReference(
-                diff, None
-            )
+            ctx.change_counter += 1
+            ctx.change_id_to_ref[change_id] = FileChangeReference(diff, None)
 
             result = "\n".join(
                 [
@@ -236,20 +234,19 @@ class GitContextFormatter:
             return result
 
         for hunk in diff.patched_file:
-            hunk_id = ctx.hunk_counter
-            hunk.section_header = f"  # Hunk ID: {hunk_id}"
-            ctx.hunk_counter += 1
-            ctx.hunk_id_to_hunk[hunk_id] = HunkFileReference(diff, hunk)
+            change_id = ctx.change_counter
+            hunk.section_header = f"  # Change ID: {change_id}"
+            ctx.change_counter += 1
+            ctx.change_id_to_ref[change_id] = FileChangeReference(diff, hunk)
 
         formatted_diff_lines = str(diff.patched_file).splitlines()
 
         if not len(diff.patched_file):
-            hunk_id = ctx.hunk_counter
             formatted_diff_lines[0] = (
-                formatted_diff_lines[0] + f"  # Hunk ID: {hunk_id}"
+                formatted_diff_lines[0] + f"  # Change ID: {change_id}"
             )
-            ctx.hunk_counter += 1
-            ctx.hunk_id_to_hunk[hunk_id] = HunkFileReference(diff, None)
+            ctx.change_counter += 1
+            ctx.change_id_to_ref[change_id] = FileChangeReference(diff, None)
 
         if self.truncate_lines:
             formatted_diff_lines = [

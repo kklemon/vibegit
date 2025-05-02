@@ -76,14 +76,14 @@ def display_summary(proposals: List[CommitProposal]):
     table = Table(title="Commit Proposals Summary")
     table.add_column("No.", style="dim", width=3)
     table.add_column("Proposed Message", style="cyan", no_wrap=False)
-    table.add_column("Hunks", style="magenta")
+    table.add_column("Changes", style="magenta")
     table.add_column("Reasoning", style="yellow", no_wrap=False)
 
     for i, proposal in enumerate(proposals):
         table.add_row(
             str(i + 1),
             proposal.commit_message,
-            ", ".join(map(str, proposal.hunk_ids)),  # Hunk IDs are ints now
+            ", ".join(map(str, proposal.change_ids)),  # Change IDs are ints now
             proposal.reasoning,
         )
 
@@ -145,7 +145,7 @@ async def run_commit_workflow(repo: git.Repo):
     if has_staged_changes(repo):
         console.print("[bold yellow]Warning:[/bold yellow] Found staged changes.")
         console.print(
-            "VibeGit works best with unstaged changes only, as it needs to stage hunks itself."
+            "VibeGit works best with unstaged changes only, as it needs to stage changes itself."
         )
 
         questions = [
@@ -207,13 +207,13 @@ async def run_commit_workflow(repo: git.Repo):
         console.print(f"[bold red]Error formatting changes for AI: {e}[/bold red]")
         sys.exit(1)
 
-    if not ctx.hunk_id_to_hunk:
+    if not ctx.change_id_to_ref:
         console.print(
-            "[yellow]No detectable hunks found in the changes. Cannot generate proposals. Exiting.[/yellow]"
+            "[yellow]No detectable changes found in the changes. Cannot generate proposals. Exiting.[/yellow]"
         )
         sys.exit(0)
 
-    console.print(f"Identified {len(ctx.hunk_id_to_hunk)} hunks.")
+    console.print(f"Identified {len(ctx.change_id_to_ref)} changes.")
 
     # 4. Get Commit Proposals from AI
     console.print("Generating commit proposals...")
@@ -315,11 +315,11 @@ async def run_commit_workflow(repo: git.Repo):
             console.print(
                 f"\nApplying proposal {i + 1} of {original_count}: '{proposal.commit_message}'"
             )
-            console.print(f"  Hunks: {proposal.hunk_ids}")
+            console.print(f"  Changes: {proposal.change_ids}")
             try:
-                console.print("[cyan]Staging hunks...[/cyan]")
+                console.print("[cyan]Staging changes...[/cyan]")
                 ctx.stage_commit_proposal(proposal)
-                console.print("[green]Hunks staged successfully.[/green]")
+                console.print("[green]Changes staged successfully.[/green]")
 
                 console.print("[cyan]Creating commit...[/cyan]")
                 # In YOLO mode, commit directly without opening editor
@@ -388,9 +388,9 @@ async def run_commit_workflow(repo: git.Repo):
 
             if action == "commit":
                 try:
-                    console.print("[cyan]Staging hunks for commit...[/cyan]")
+                    console.print("[cyan]Staging changes for commit...[/cyan]")
                     ctx.stage_commit_proposal(proposal)
-                    console.print("[green]Hunks staged.[/green]")
+                    console.print("[green]Changes staged.[/green]")
 
                     console.print("[cyan]Opening editor for commit message...[/cyan]")
                     commit_successful = open_editor_for_commit(
@@ -427,7 +427,7 @@ async def run_commit_workflow(repo: git.Repo):
 
                 except git.GitCommandError as e:
                     console.print(
-                        f"[bold red]Error staging hunks for proposal {current_num}: {e}[/bold red]"
+                        f"[bold red]Error staging changes for proposal {current_num}: {e}[/bold red]"
                     )
                     console.print(
                         "[yellow]Skipping this proposal due to staging error.[/yellow]"
@@ -459,11 +459,11 @@ async def run_commit_workflow(repo: git.Repo):
                     console.print(
                         f"\nApplying remaining proposal {i + 1} of {initial_remaining_count}: '{p.commit_message}'"
                     )
-                    console.print(f"  Hunks: {p.hunk_ids}")
+                    console.print(f"  Changes: {p.change_ids}")
                     try:
-                        console.print("[cyan]Staging hunks...[/cyan]")
+                        console.print("[cyan]Staging changes...[/cyan]")
                         ctx.stage_commit_proposal(p)
-                        console.print("[green]Hunks staged successfully.[/green]")
+                        console.print("[green]Changes staged successfully.[/green]")
                         console.print("[cyan]Creating commit...[/cyan]")
                         repo.index.commit(p.commit_message)  # Yolo -> No editor
                         console.print("[green]Commit created successfully.[/green]")
