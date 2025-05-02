@@ -199,7 +199,7 @@ async def run_commit_workflow(repo: git.Repo):
         )
         sys.exit(0)
 
-    console.print(f"Identified {len(ctx.change_id_to_ref)} changes.")
+    console.print(f"Identified {len(ctx.change_id_to_ref)} change(s).")
 
     # 4. Get Commit Proposals from AI
     console.print("Generating commit proposals...")
