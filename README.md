@@ -30,7 +30,7 @@ You could:
 2.  Write a vague commit message like `"fix stuff"` and promise yourself you'll `rebase -i` later (spoiler: you won't).
 3.  Just `git commit -a -m "WIP"` and call it a day, leaving a dumpster fire for future you (or your poor colleagues).
 
-**There *has* to be a better way.** (Spoiler: There is. Keep reading.)
+**There *has* to be a better way.**
 
 ## Enter VibeGit: Your AI-Powered Git Housekeeper 🤖🧹
 
