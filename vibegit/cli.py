@@ -17,7 +17,11 @@ from vibegit.git import (
     CommitProposalContext,
     get_git_status,
 )
-from vibegit.schemas import CommitGroupingProposal, CommitProposal
+from vibegit.schemas import (
+    CommitProposalListSchema,
+    CommitProposalSchema,
+    IncompleteCommitProposalListSchema,
+)
 
 # Temporary fix. See https://github.com/grpc/grpc/issues/37642
 os.environ["GRPC_VERBOSITY"] = "NONE"
@@ -51,7 +55,9 @@ def reset_staged_changes(repo: git.Repo) -> bool:
 # --- CLI Helper Functions ---
 
 
-def display_summary(proposals: List[CommitProposal]):
+def display_summary(
+    proposals: CommitProposalListSchema | IncompleteCommitProposalListSchema,
+):
     """Displays a summary of the commit proposals."""
     if not proposals:
         console.print("[yellow]No commit proposals to display.[/yellow]")
@@ -65,7 +71,7 @@ def display_summary(proposals: List[CommitProposal]):
     table.add_column("Changes", style="magenta")
     table.add_column("Reasoning", style="yellow", no_wrap=False)
 
-    for i, proposal in enumerate(proposals):
+    for i, proposal in enumerate(proposals.commit_proposals):
         table.add_row(
             str(i + 1),
             proposal.commit_message,
@@ -74,6 +80,19 @@ def display_summary(proposals: List[CommitProposal]):
         )
 
     console.print(table)
+
+    if isinstance(proposals, IncompleteCommitProposalListSchema):
+        console.print()
+
+        table = Table(title="Excluded Changes")
+        table.add_column("Changes", style="magenta")
+        table.add_column("Reasoning", style="yellow", no_wrap=False)
+        table.add_row(
+            ", ".join(map(str, proposals.exclude.change_ids)),
+            proposals.exclude.reasoning,
+        )
+
+        console.print(table)
 
 
 def open_editor_for_commit(repo: git.Repo, proposed_message: str) -> bool:
@@ -203,8 +222,10 @@ async def run_commit_workflow(repo: git.Repo):
 
     # 4. Get Commit Proposals from AI
     console.print("Generating commit proposals...")
-    ai = CommitProposalAI(config.get_chat_model())
-    grouping_proposal: Optional[CommitGroupingProposal] = None
+    ai = CommitProposalAI(config.get_chat_model(), allow_excluding_changes=config.allow_excluding_changes)
+    grouping_proposal: (
+        CommitProposalListSchema | IncompleteCommitProposalListSchema | None
+    ) = None
     try:
         grouping_proposal = await ai.propose_commits(formatted_context)
     except Exception as e:
@@ -267,7 +288,7 @@ async def run_commit_workflow(repo: git.Repo):
         sys.exit(0)
 
     if mode == "summary":
-        display_summary(proposals)
+        display_summary(grouping_proposal)
         # After summary, ask again how to proceed (excluding summary itself)
         questions = [
             inquirer.List(
@@ -294,7 +315,7 @@ async def run_commit_workflow(repo: git.Repo):
 
     if mode == "yolo":
         console.print(
-            f"\n[bold magenta]Entering Yolo Mode: Applying all {len(proposals)} proposals...[/bold magenta]"
+            f"\n[bold magenta]Entering #yolo Mode: Applying all {len(proposals)} proposals...[/bold magenta]"
         )
         original_count = len(proposals)
         for i, proposal in enumerate(list(proposals)):  # Iterate over a copy
@@ -513,7 +534,7 @@ async def run_commit_workflow(repo: git.Repo):
         # Check if *staged* changes exist from failed editor commit etc.
         if not has_staged_changes(repo):
             console.print(
-                "\n[bold green]VibeGit finished. Working directory is clean.[/bold green]"
+                "\n[bold green]VibeGit finished. Working directory is clean. 😎[/bold green]"
             )
         else:
             console.print(
