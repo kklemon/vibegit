@@ -15,10 +15,10 @@ class CommitProposalAI:
         self.model = model.with_structured_output(schema)
         self.allow_excluding_changes = allow_excluding_changes
 
-    async def propose_commits(
+    def propose_commits(
         self, context: str
     ) -> CommitProposalListSchema | IncompleteCommitProposalListSchema | None:
-        result = await self.model.ainvoke(
+        result = self.model.invoke(
             [
                 {
                     "role": "system",
