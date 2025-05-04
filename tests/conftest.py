@@ -64,6 +64,16 @@ test_repositories: dict[str, TestRepoConfig] = {
 }
 
 
+test_models = [
+    "google_genai:gemini-2.5-flash-preview-04-17",
+    "google_genai:gemini-2.5-pro-preview-03-25",
+    "openai:gpt-4o",
+    "openai:gpt-4.1",
+    "openai:o4-mini",
+    "openai:o3-mini",
+]
+
+
 @pytest.fixture
 def repo(request):
     repo_config = test_repositories[request.param]
@@ -72,5 +82,5 @@ def repo(request):
 
 
 @pytest.fixture
-def chat_model():
-    return init_chat_model("google_genai:gemini-2.5-flash-preview-04-17")
+def chat_model(request):
+    yield init_chat_model(request.param)
