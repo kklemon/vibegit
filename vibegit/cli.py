@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 import os
 import subprocess
 import sys
@@ -27,6 +28,7 @@ from vibegit.schemas import (
 os.environ["GRPC_VERBOSITY"] = "NONE"
 
 console = Console()
+
 
 def get_config() -> Config:
     try:

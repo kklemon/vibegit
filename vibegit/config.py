@@ -1,12 +1,13 @@
+import collections
 import os
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args, get_origin
 
 import platformdirs
 import toml
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 from pydantic_settings import BaseSettings as _BaseSettings
 from pydantic_settings import (
     PydanticBaseSettingsSource,
@@ -41,39 +42,118 @@ class BaseSettings(_BaseSettings):
         raise ValueError(f"Expected a BaseSettings or dict, got {type(current_value)}")
 
     def set_by_path(self, path: str, value: Any):
-        current_part, *remaining_parts = path.split(".", maxsplit=1)
+        """
+        Sets a value at the specified path, coercing it to the target type.
 
-        if not remaining_parts:
-            # This is the final part, set the attribute
-            if hasattr(self, current_part):
-                # TODO: Consider type validation/coercion here if needed
-                setattr(self, current_part, value)
-            else:
-                raise AttributeError(
-                    f"'{type(self).__name__}' object has no attribute '{current_part}'"
-                )
-            return
+        Args:
+            path: A dot-separated string representing the path (e.g., "model.temperature").
+            value: The value to set. It will be parsed/coerced to the target type.
 
-        # Need to delve deeper
-        try:
-            current_attribute = getattr(self, current_part)
-        except AttributeError:
+        Raises:
+            AttributeError: If the path is invalid.
+            ValueError: If the value cannot be coerced to the target type or path is malformed.
+            TypeError: If trying to set a path through an unsupported type.
+        """
+        parts = path.split(".")
+        if not parts:
+            raise ValueError("Path cannot be empty")
+        self._set_recursive(parts, value, original_path=path)
+
+    def _set_recursive(self, parts: list[str], value: Any, original_path: str):
+        current_part = parts[0]
+        remaining_parts = parts[1:]
+
+        if not hasattr(self, current_part):
             raise AttributeError(
-                f"'{type(self).__name__}' object has no attribute '{current_part}'"
+                f"'{type(self).__name__}' object has no attribute '{current_part}' in path '{original_path}'"
             )
 
-        if isinstance(current_attribute, BaseSettings):
-            current_attribute.set_by_path(remaining_parts[0], value)
-        elif isinstance(current_attribute, dict):
-            # Assuming the dictionary path has only one level left
+        if not remaining_parts:
+            # --- Base Case: Set the final attribute ---
+            try:
+                field_info = self.model_fields.get(current_part)
+                if field_info and field_info.annotation:
+                    # Use TypeAdapter for validation and coercion
+                    adapter = TypeAdapter(field_info.annotation)
+                    coerced_value = adapter.validate_python(value)
+                    setattr(self, current_part, coerced_value)
+                else:
+                    # Fallback if no type annotation found (less safe)
+                    # Or raise error if strict typing is required?
+                    print(
+                        f"Warning: No type annotation found for field '{current_part}'. Setting value directly."
+                    )
+                    setattr(self, current_part, value)
+            except ValidationError as e:
+                raise ValueError(
+                    f"Invalid value for '{original_path}': {value!r}. Details: {e}"
+                ) from e
+            return
+
+        # --- Recursive Step: Traverse deeper ---
+        target_attribute = getattr(self, current_part)
+
+        if isinstance(target_attribute, BaseSettings):
+            # Recurse into nested BaseSettings
+            target_attribute._set_recursive(
+                remaining_parts, value, original_path=original_path
+            )
+        elif isinstance(target_attribute, dict):
+            if len(remaining_parts) != 1:
+                # Currently supporting only one level deep modification in dicts via path
+                raise ValueError(
+                    f"Path into dict must have exactly one remaining part for key access. "
+                    f"Path: '{original_path}', Remaining: {'.'.join(remaining_parts)}"
+                )
+
             dict_key = remaining_parts[0]
-            current_attribute[dict_key] = value
-            # Re-assign to potentially trigger Pydantic updates if needed
-            setattr(self, current_part, current_attribute)
+
+            # Determine the expected *value* type for the dictionary
+            expected_value_type = Any
+            try:
+                dict_field_info = self.model_fields.get(current_part)
+                if dict_field_info and dict_field_info.annotation:
+                    origin = get_origin(dict_field_info.annotation)
+                    args = get_args(dict_field_info.annotation)
+
+                    # Check if it's a dict-like type (e.g., dict, Dict) and has type args
+                    if (
+                        origin
+                        and issubclass(origin, collections.abc.Mapping)
+                        and len(args) == 2
+                    ):
+                        expected_value_type = args[1]
+                    elif origin and not issubclass(origin, collections.abc.Mapping):
+                        raise TypeError(
+                            f"Attribute '{current_part}' is not a Mapping type, but {origin}"
+                        )
+
+                # Coerce the incoming value using the determined dictionary value type
+                adapter = TypeAdapter(expected_value_type)
+                coerced_value = adapter.validate_python(value)
+
+                # Set the value in the dictionary
+                target_attribute[dict_key] = coerced_value
+                # Note: Re-assigning the dict via setattr(self, current_part, target_attribute)
+                # might be needed if there are complex validators on the dict field itself,
+                # but often isn't necessary for simple dict updates.
+
+            except ValidationError as e:
+                raise ValueError(
+                    f"Invalid value for '{original_path}' (key: '{dict_key}'): {value!r}. "
+                    f"Expected type '{expected_value_type}'. Details: {e}"
+                ) from e
+            except Exception as e:
+                # Catch other potential errors during type introspection/setting
+                raise TypeError(
+                    f"Error setting dict key '{dict_key}' in '{current_part}' for path '{original_path}': {e}"
+                ) from e
+
         else:
+            # Path tries to go through an attribute that is neither BaseSettings nor dict
             raise TypeError(
-                f"Cannot set path '{path}'. Attribute '{current_part}' is neither a "
-                f"BaseSettings instance nor a dict, but {type(current_attribute)}"
+                f"Cannot set path '{original_path}'. Attribute '{current_part}' is neither a "
+                f"BaseSettings instance nor a dict, but {type(target_attribute)}"
             )
 
 
