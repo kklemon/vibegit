@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, cast
 
 import platformdirs
 import toml
@@ -93,8 +93,23 @@ class ContextFormattingConfig(BaseSettings):
         )
 
 
+class ModelConfig(BaseSettings):
+    name: str = "google_genai:gemini-2.5-flash-preview-04-17"
+    temperature: float | None = None  # Use the default temperature
+
+    def get_chat_model(self) -> BaseChatModel:
+        kwargs: dict[str, Any] = dict(
+            model=self.name,
+        )
+
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
+
+        return cast(BaseChatModel, init_chat_model(**kwargs))
+
+
 class Config(BaseSettings):
-    model_name: str = "google_genai:gemini-2.5-flash-preview-04-17"
+    model: ModelConfig = ModelConfig()
     context_formatting: ContextFormattingConfig = ContextFormattingConfig()
     api_keys: dict[str, str] = Field(default_factory=dict)
     allow_excluding_changes: bool = True
@@ -117,17 +132,7 @@ class Config(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (TomlConfigSettingsSource(settings_cls),)
 
-    def get_chat_model(self) -> BaseChatModel:
-        return init_chat_model(self.model_name)
-
     def save_config(self):
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.config_path, "w") as f:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_PATH, "w") as f:
             toml.dump(self.model_dump(), f)
-
-    @property
-    def config_path(self) -> Path:
-        return CONFIG_PATH
-
-
-config = Config()
