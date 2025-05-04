@@ -98,7 +98,7 @@ pipx install vibegit
 uvx vibegit
 ```
 
-### Configuration
+### Set API Keys
 
 Before your first vibe git'ing session, you may have to configure VibeGit. This can be done with the `vibegit config set <path> <value>` CLI command. You will most likely have to provide your LLM API key. Google's Gemini models are used by default, so you have will to set `api_keys.google_api_key` to your API key:
 
@@ -107,6 +107,62 @@ vibegit config set api_keys.google_api_key <your-secret-api-key>
 ```
 
 If you don't have a Gemini API key yet, get one [here](https://aistudio.google.com/app/apikey).
+
+## Configuration
+
+Use `vibegit config` to print the current configuration to the console.
+
+To set single configuration values, `vibegit config set <path> <value>` and provide the configuration path in dot notation, e.g. `model.name`.
+
+For a more convenient editing of the whole configuration file, use `vibegit config open` which will open the config file in your system's default editor.
+
+Below is a description of the most relevant configuration options.
+
+### Models
+
+Gemini 2.5 Flash is used by default, as it provides arguably the best trade-off between performance, price and latency. However, you can use any model that supports structured outputs given a JSON schema.
+
+VibeGit has been tested with:
+
+* Gemini 2.5 Flash (`google_genai:gemini-2.5-flash-preview-04-17`)
+* Gemini 2.5 Pro (`google_genai:gemini-2.5-pro-preview-03-25`)
+* GPT 4o (`openai:gpt-4o`)
+* GPT 4.1 (`openai:gpt-4.1`)
+* o4-mini (`openai:o4-mini`)
+* o3-mini (`openai:o3-mini`)
+
+You can use any other model that meets the aforementioned requirements and is supported by LangChain. The model name needs to be provided in the [`init_chat_model` format](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html).
+
+To configure a model, use the following command:
+
+```bash
+vibegit config set model.name <model-name>
+```
+
+> [!NOTE]
+> Models can't be configured on repository level at the moment.
+
+### Incomplete Commit Proposals
+
+VibeGit can be configured to generate commit proposals that include all open changes and exclude changes which may look unfinished or contain obvious errors (enabled by default).
+
+To control this option, use
+
+```bash
+vibegit config set allow_excluding_changes <true/false>
+```
+
+The behavior of the excluding behavior can be customized with a `.vibegitrules` file (see next section).
+
+## .vibegitrules
+
+You may provide a `.vibegitrules` file in the root of your repository with custom instructions for the generation of commit proposals. Typical use cases are:
+
+* Commit message style
+* Commit scope and granularity
+* Excluding certain files or changes, either on semantic grounds or based on filetype
+
+See [VibeGit's `.vibegitrules` file](https://github.com/kklemon/vibegit/blob/master/.vibegitrules) for an example.
 
 ## The Future: More Vibes, More Git? 🚀
 
