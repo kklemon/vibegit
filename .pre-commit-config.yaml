@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.11.8
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy .
+        # filenames should not be passed as they would collide with the config in pyproject.toml
+        pass_filenames: false
+        files: '(/[^/]*)*/[^/]*\.py$'
+        language: system
