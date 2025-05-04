@@ -657,5 +657,10 @@ def set(path: str, value: str):
     config.save_config()
 
 
+@config_cli.command()
+def path():
+    print(CONFIG_PATH)
+
+
 if __name__ == "__main__":
     cli()
