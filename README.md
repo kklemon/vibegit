@@ -1,14 +1,23 @@
 <h1 align="center">✨ VibeGit ✨</h1>
 
 <p align="center">
-Spend more time vibe coding and less time cleaning your messy git repository.
+  <i>Spend more time (vibe) coding and less time cleaning your messy git repository.</i>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/vibegit/" target="_blank">
+    <img alt="PyPI - Version" src="https://img.shields.io/pypi/v/vibegit">
+  </a>
+  <a href="https://pypi.org/pypi/vibegit/" target="_blank">
+    <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="py_versions">
+  </a>
 </p>
 
 ---
 
 <p float="right" align="center">
-    <img src="resources/before-vibegit.png" width="35%">
-    <img src="resources/after-vibegit.png" width="35%">
+    <img src="resources/before-vibegit.png" width="45%">
+    <img src="resources/after-vibegit.png" width="45%">
 </p>
 
 <p align="center">
