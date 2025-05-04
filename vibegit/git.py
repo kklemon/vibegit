@@ -217,9 +217,7 @@ class GitContextFormatter:
             patch_info = diff.patched_file.patch_info
             assert patch_info is not None, "Expected patch info but found None"
             patch_info_lines = str(patch_info).splitlines()
-            patch_info_lines[0] = (
-                f"{patch_info_lines[0]}  # Change ID: {change_id}"
-            )
+            patch_info_lines[0] = f"{patch_info_lines[0]}  # Change ID: {change_id}"
 
             ctx.change_counter += 1
             ctx.change_id_to_ref[change_id] = FileChangeReference(diff, None)
@@ -242,6 +240,8 @@ class GitContextFormatter:
         formatted_diff_lines = str(diff.patched_file).splitlines()
 
         if not len(diff.patched_file):
+            change_id = ctx.change_counter
+            
             formatted_diff_lines[0] = (
                 formatted_diff_lines[0] + f"  # Change ID: {change_id}"
             )

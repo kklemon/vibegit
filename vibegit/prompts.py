@@ -1,6 +1,3 @@
-from typing import Literal
-
-
 COMPLETE_FORMAT_DESCRIPTION = """
 ```json
 {
@@ -80,7 +77,7 @@ Your final output **must** be a JSON object strictly conforming to the following
 
 ```diff
 @@ -10,7 +10,7 @@ import {{ ... }}
- # Hunk ID: 123
+ # Change ID: 123
  Some code context
 -Removed line
 +Added line
