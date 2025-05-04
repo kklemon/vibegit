@@ -1,32 +1,59 @@
-import asyncio
+from copy import deepcopy
 import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 import click
 import git
 import inquirer
 from rich import print as pprint
+from rich.table import Table
 from rich.console import Console
 
 from vibegit.ai import CommitProposalAI
-from vibegit.config import config
+from vibegit.config import Config, CONFIG_PATH
 from vibegit.git import (
     CommitProposalContext,
     get_git_status,
 )
 from vibegit.schemas import (
     CommitProposalListSchema,
-    CommitProposalSchema,
     IncompleteCommitProposalListSchema,
 )
 
 # Temporary fix. See https://github.com/grpc/grpc/issues/37642
+# Update: Doesn't seem to work.
 os.environ["GRPC_VERBOSITY"] = "NONE"
 
 console = Console()
+
+def get_config() -> Config:
+    try:
+        config = Config()
+        return config
+    except Exception as e:
+        console.print(f"[bold red]Error loading config: {e}[/bold red]")
+
+        questions = [
+            inquirer.Confirm(
+                "reset",
+                message="Reset config or exit?",
+                default=False,
+            ),
+        ]
+        answers = inquirer.prompt(questions)
+
+        if answers and answers["reset"]:
+            CONFIG_PATH.unlink()
+            console.print("[green]Config reset successfully.[/green]")
+            return get_config()
+        else:
+            console.print("[red]Exiting.[/red]")
+            sys.exit(1)
+
+
+config = get_config()
 
 
 def has_staged_changes(repo: git.Repo) -> bool:
@@ -45,6 +72,9 @@ def reset_staged_changes(repo: git.Repo) -> bool:
     try:
         # 'git reset HEAD --' unstages all changes
         repo.git.reset("HEAD", "--")
+        if has_staged_changes(repo):
+            console.print("[red]Failed to reset staged changes.[/red]")
+            return False
         console.print("[green]Successfully reset staged changes.[/green]")
         return True
     except git.GitCommandError as e:
@@ -52,18 +82,13 @@ def reset_staged_changes(repo: git.Repo) -> bool:
         return False
 
 
-# --- CLI Helper Functions ---
-
-
 def display_summary(
-    proposals: CommitProposalListSchema | IncompleteCommitProposalListSchema,
+    proposals: CommitProposalListSchema,
 ):
     """Displays a summary of the commit proposals."""
-    if not proposals:
+    if not proposals or not proposals.commit_proposals:
         console.print("[yellow]No commit proposals to display.[/yellow]")
         return
-
-    from rich.table import Table
 
     table = Table(title="Commit Proposals Summary")
     table.add_column("No.", style="dim", width=3)
@@ -142,14 +167,7 @@ def get_user_instructions(repo: git.Repo) -> str | None:
     return None
 
 
-# --- Main Commit Workflow ---
-
-
-async def run_commit_workflow(repo: git.Repo):
-    """Handles the main logic for the 'commit' subcommand."""
-    console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
-
-    # 1. Check for staged changes
+def prepare_repo(repo: git.Repo):
     if has_staged_changes(repo):
         console.print("[bold yellow]Warning:[/bold yellow] Found staged changes.")
         console.print(
@@ -172,12 +190,6 @@ async def run_commit_workflow(repo: git.Repo):
                     "[bold red]Failed to reset staged changes. Exiting.[/bold red]"
                 )
                 sys.exit(1)
-            # Double check if reset worked
-            if has_staged_changes(repo):
-                console.print(
-                    "[bold red]Failed to reset staged changes even after attempting. Exiting.[/bold red]"
-                )
-                sys.exit(1)
             else:
                 console.print("Staged changes have been reset. Proceeding...")
         else:
@@ -185,6 +197,14 @@ async def run_commit_workflow(repo: git.Repo):
             sys.exit(0)
     else:
         console.print("[green]Repository has no staged changes. Good to go![/green]")
+
+
+def run_commit_workflow(repo: git.Repo):
+    """Handles the main logic for the 'commit' subcommand."""
+    console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
+
+    # 1. Check for staged changes
+    prepare_repo(repo)
 
     # 2. Get Git Status and check for *any* changes
     try:
@@ -226,13 +246,13 @@ async def run_commit_workflow(repo: git.Repo):
     # 4. Get Commit Proposals from AI
     console.print("Generating commit proposals...")
     ai = CommitProposalAI(
-        config.get_chat_model(), allow_excluding_changes=config.allow_excluding_changes
+        config.model.get_chat_model(),
+        allow_excluding_changes=config.allow_excluding_changes,
     )
-    grouping_proposal: (
-        CommitProposalListSchema | IncompleteCommitProposalListSchema | None
-    ) = None
+    result: CommitProposalListSchema | IncompleteCommitProposalListSchema | None = None
+
     try:
-        grouping_proposal = await ai.propose_commits(formatted_context)
+        result = ai.propose_commits(formatted_context)
     except Exception as e:
         console.print(
             f"[bold red]Error getting commit proposals from AI: {e}[/bold red]"
@@ -240,19 +260,19 @@ async def run_commit_workflow(repo: git.Repo):
         # Consider more specific error handling based on potential AI exceptions
         sys.exit(1)
 
-    if not grouping_proposal or not grouping_proposal.commit_proposals:
+    if not result or not result.commit_proposals:
         console.print(
             "[yellow]AI did not generate any commit proposals. Exiting.[/yellow]"
         )
         sys.exit(0)
 
     console.print(
-        f"[green]Generated {len(grouping_proposal.commit_proposals)} commit proposal(s).[/green]"
+        f"[green]Generated {len(result.commit_proposals)} commit proposal(s).[/green]"
     )
 
     # 5. Validate Proposals
     try:
-        ctx.validate_commit_proposal(grouping_proposal)
+        ctx.validate_commit_proposal(result)
         console.print("[green]AI proposals validated successfully.[/green]")
     except ValueError as e:
         print(formatted_context)
@@ -261,8 +281,6 @@ async def run_commit_workflow(repo: git.Repo):
         sys.exit(1)
 
     # 6. Interactive Workflow Choice
-    proposals = grouping_proposal.commit_proposals  # Get a mutable list
-
     questions = [
         inquirer.List(
             "mode",
@@ -289,11 +307,12 @@ async def run_commit_workflow(repo: git.Repo):
 
     if mode == "rerun":
         console.print("[yellow]Rerunning VibeGit...[/yellow]")
-        await run_commit_workflow(repo)
+        run_commit_workflow(repo)
         sys.exit(0)
 
     if mode == "summary":
-        display_summary(grouping_proposal)
+        display_summary(result)
+
         # After summary, ask again how to proceed (excluding summary itself)
         questions = [
             inquirer.List(
@@ -304,6 +323,10 @@ async def run_commit_workflow(repo: git.Repo):
                     (
                         "Interactive: Review and commit one by one (opens editor)",
                         "interactive",
+                    ),
+                    (
+                        "Show a detailed summary of the commit proposals",
+                        "detailed_summary",
                     ),
                     ("Quit", "quit"),
                 ],
@@ -316,14 +339,13 @@ async def run_commit_workflow(repo: git.Repo):
             console.print("[yellow]Exiting as requested.[/yellow]")
             sys.exit(0)
 
-    # --- Apply Commits ---
-
     if mode == "yolo":
+        commit_proposals = result.commit_proposals
         console.print(
-            f"\n[bold magenta]Entering #yolo Mode: Applying all {len(proposals)} proposals...[/bold magenta]"
+            f"\n[bold magenta]Entering #yolo Mode: Applying all {len(commit_proposals)} proposals...[/bold magenta]"
         )
-        original_count = len(proposals)
-        for i, proposal in enumerate(list(proposals)):  # Iterate over a copy
+        original_count = len(commit_proposals)
+        for i, proposal in enumerate(list(commit_proposals)):
             console.print(
                 f"\nApplying proposal {i + 1} of {original_count}: '{proposal.commit_message}'"
             )
@@ -335,9 +357,9 @@ async def run_commit_workflow(repo: git.Repo):
 
                 console.print("[cyan]Creating commit...[/cyan]")
                 # In YOLO mode, commit directly without opening editor
-                repo.index.commit(proposal.commit_message)
+                ctx.commit_commit_proposal(proposal)
                 console.print("[green]Commit created successfully.[/green]")
-                proposals.pop(0)  # Remove applied proposal from original list
+                commit_proposals.pop(0)  # Remove applied proposal from original list
 
             except git.GitCommandError as e:
                 console.print(
@@ -351,7 +373,7 @@ async def run_commit_workflow(repo: git.Repo):
                     "[cyan]Attempting to unstage changes from failed step...[/cyan]"
                 )
                 reset_staged_changes(repo)
-                break  # Exit the loop
+                break
             except Exception as e:
                 console.print(
                     f"[bold red]An unexpected error occurred processing proposal {i + 1}: {e}[/bold red]"
@@ -365,21 +387,24 @@ async def run_commit_workflow(repo: git.Repo):
                 )
                 reset_staged_changes(repo)
 
-                raise e  # Exit the loop
+                raise e
+
+        result.commit_proposals = commit_proposals
 
     elif mode == "interactive":
         console.print("\n[bold magenta]Entering Interactive Mode...[/bold magenta]")
-        remaining_proposals = list(proposals)  # Work with a copy
-        total_proposals = len(remaining_proposals)
+        result_copy = deepcopy(result)
+        total_proposals = len(result_copy.commit_proposals)
         committed_count = 0
 
-        while remaining_proposals:
-            proposal = remaining_proposals[0]
-            current_num = total_proposals - len(remaining_proposals) + 1
+        while result_copy.commit_proposals:
+            proposal = result_copy.commit_proposals[0]
+
+            current_num = total_proposals - len(result_copy.commit_proposals) + 1
 
             console.print("\n" + "=" * 40)
             console.print(f"[bold]Proposal {current_num} of {total_proposals}:[/bold]")
-            display_summary([proposal])  # Reuse summary for single proposal display
+            display_summary(result_copy)
 
             questions = [
                 inquirer.List(
@@ -411,7 +436,7 @@ async def run_commit_workflow(repo: git.Repo):
 
                     if commit_successful:
                         committed_count += 1
-                        remaining_proposals.pop(0)  # Remove if committed
+                        result_copy.commit_proposals.pop(0)  # Remove if committed
                         console.print(
                             f"[green]Proposal {current_num} committed.[/green]"
                         )
@@ -458,16 +483,16 @@ async def run_commit_workflow(repo: git.Repo):
                     f"[yellow]Skipping proposal {current_num}. It will be shown again later if you continue.[/yellow]"
                 )
                 # Move proposal to the end of the list to avoid immediate repetition
-                skipped_proposal = remaining_proposals.pop(0)
-                remaining_proposals.append(skipped_proposal)
+                skipped_proposal = result_copy.commit_proposals.pop(0)
+                result_copy.commit_proposals.append(skipped_proposal)
 
             elif action == "all":
                 console.print(
-                    f"\n[bold magenta]Switching to Yolo Mode for the remaining {len(remaining_proposals)} proposals...[/bold magenta]"
+                    f"\n[bold magenta]Switching to Yolo Mode for the remaining {len(result_copy.commit_proposals)} proposals...[/bold magenta]"
                 )
-                initial_remaining_count = len(remaining_proposals)
+                initial_remaining_count = len(result_copy.commit_proposals)
                 yolo_successful = True
-                for i, p in enumerate(list(remaining_proposals)):  # Iterate copy
+                for i, p in enumerate(list(result_copy.commit_proposals)):
                     console.print(
                         f"\nApplying remaining proposal {i + 1} of {initial_remaining_count}: '{p.commit_message}'"
                     )
@@ -479,7 +504,7 @@ async def run_commit_workflow(repo: git.Repo):
                         console.print("[cyan]Creating commit...[/cyan]")
                         repo.index.commit(p.commit_message)  # Yolo -> No editor
                         console.print("[green]Commit created successfully.[/green]")
-                        remaining_proposals.pop(0)  # Remove from original list
+                        result_copy.commit_proposals.pop(0)  # Remove from original list
                         committed_count += 1
                     except git.GitCommandError as e:
                         console.print(
@@ -518,7 +543,7 @@ async def run_commit_workflow(repo: git.Repo):
                 break  # Exit interactive loop after 'all' attempt
 
             elif action == "summary":
-                display_summary(remaining_proposals)
+                display_summary(result_copy)
                 # Loop continues to show the current proposal again
 
             elif action == "quit":
@@ -526,11 +551,11 @@ async def run_commit_workflow(repo: git.Repo):
                 break  # Exit the while loop
 
         # End of interactive loop
-        if not remaining_proposals:
+        if not result_copy.commit_proposals:
             console.print("\n[bold green]All proposals processed.[/bold green]")
         else:
             console.print(
-                f"\n[yellow]Exited with {len(remaining_proposals)} proposals remaining.[/yellow]"
+                f"\n[yellow]Exited with {len(result_copy.commit_proposals)} proposals remaining.[/yellow]"
             )
 
     # --- Final Summary ---
@@ -551,10 +576,7 @@ async def run_commit_workflow(repo: git.Repo):
         )
 
 
-# --- Entry Point ---
-
-
-def run_commit():
+def run_commit(debug: bool = False):
     # For now, only the 'commit' subcommand is implemented directly.
     # Later, this could use argparse or Typer/Click to handle subcommands.
     # Example: if args.subcommand == 'commit': await run_commit_workflow()
@@ -572,20 +594,21 @@ def run_commit():
         )
         sys.exit(1)
 
-    # Run the async workflow
     try:
-        asyncio.run(run_commit_workflow(repo))
+        run_commit_workflow(repo)
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         sys.exit(1)
     except Exception as e:
         # Catch-all for unexpected errors during async execution
         console.print(f"[bold red]An unexpected error occurred: {e}[/bold red]")
-        # Optionally print traceback here for debugging
-        import traceback
 
-        traceback.print_exc()
-        sys.exit(1)
+        if debug:
+            # Optionally print traceback here for debugging
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
 
 
 @click.group(invoke_without_command=True)
@@ -599,8 +622,9 @@ def cli(ctx):
 
 
 @cli.command()
-def commit():
-    run_commit()
+@click.option("--debug", "-d", is_flag=True, help="Enable debug mode")
+def commit(debug: bool):
+    run_commit(debug)
 
 
 @cli.group(name="config", invoke_without_command=True)
@@ -614,7 +638,7 @@ def config_cli(ctx):
 def open():
     import subprocess
 
-    subprocess.run(["open", config.config_path])
+    subprocess.run(["open", CONFIG_PATH])
 
 
 @config_cli.command()
