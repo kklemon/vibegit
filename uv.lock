@@ -2933,7 +2933,7 @@ wheels = [
 
 [[package]]
 name = "vibegit"
-version = "0.1.2"
+version = "0.1.4"
 source = { virtual = "." }
 dependencies = [
     { name = "click" },
