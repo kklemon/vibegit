@@ -1,4 +1,3 @@
-import subprocess
 import pytest
 
 from conftest import test_repositories
