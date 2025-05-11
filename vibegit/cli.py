@@ -1,27 +1,30 @@
-from copy import deepcopy
-import json
 import os
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import click
 import git
 import inquirer
 from rich import print as pprint
-from rich.table import Table
 from rich.console import Console
+from rich.table import Table
+from unidiff import PatchedFile
 
 from vibegit.ai import CommitProposalAI
-from vibegit.config import Config, CONFIG_PATH
+from vibegit.config import CONFIG_PATH, Config
 from vibegit.git import (
     CommitProposalContext,
+    GitStatusSummary,
     get_git_status,
 )
 from vibegit.schemas import (
-    CommitProposalListSchema,
-    IncompleteCommitProposalListSchema,
+    CommitProposalSchema,
+    CommitProposalsResultSchema,
+    IncompleteCommitProposalsResultSchema,
 )
+from vibegit.utils import compare_versions, get_version
 
 # Temporary fix. See https://github.com/grpc/grpc/issues/37642
 # Update: Doesn't seem to work.
@@ -84,47 +87,6 @@ def reset_staged_changes(repo: git.Repo) -> bool:
         return False
 
 
-def display_summary(
-    proposals: CommitProposalListSchema,
-):
-    """Displays a summary of the commit proposals."""
-    if not proposals or not proposals.commit_proposals:
-        console.print("[yellow]No commit proposals to display.[/yellow]")
-        return
-
-    table = Table(title="Commit Proposals Summary")
-    table.add_column("No.", style="dim", width=3)
-    table.add_column("Proposed Message", style="cyan", no_wrap=False)
-    table.add_column("Changes", style="magenta")
-    table.add_column("Reasoning", style="yellow", no_wrap=False)
-
-    for i, proposal in enumerate(proposals.commit_proposals):
-        table.add_row(
-            str(i + 1),
-            proposal.commit_message,
-            ", ".join(map(str, proposal.change_ids)),  # Change IDs are ints now
-            proposal.reasoning,
-        )
-
-    console.print(table)
-
-    if (
-        isinstance(proposals, IncompleteCommitProposalListSchema)
-        and proposals.exclude.change_ids
-    ):
-        console.print()
-
-        table = Table(title="Excluded Changes")
-        table.add_column("Changes", style="magenta")
-        table.add_column("Reasoning", style="yellow", no_wrap=False)
-        table.add_row(
-            ", ".join(map(str, proposals.exclude.change_ids)),
-            proposals.exclude.reasoning,
-        )
-
-        console.print(table)
-
-
 def open_editor_for_commit(repo: git.Repo, proposed_message: str) -> bool:
     """
     Runs 'git commit -e -m <proposed_message>' to open the default editor
@@ -169,151 +131,211 @@ def get_user_instructions(repo: git.Repo) -> str | None:
     return None
 
 
-def prepare_repo(repo: git.Repo):
-    if has_staged_changes(repo):
-        console.print("[bold yellow]Warning:[/bold yellow] Found staged changes.")
-        console.print(
-            "VibeGit works best with unstaged changes only, as it needs to stage changes itself."
-        )
+class InteractiveCLI:
+    def __init__(self, config: Config, repo: git.Repo):
+        self.config = config
+        self.repo = repo
 
-        questions = [
-            inquirer.Confirm(
-                "reset",
-                message="Do you want to unstage (reset) all currently staged changes?",
-                default=False,
-            ),
-        ]
-        answers = inquirer.prompt(questions)
-
-        if answers and answers["reset"]:
-            if not reset_staged_changes(repo):
-                # Try one more time? The prompt requested exiting if first attempt fails.
-                console.print(
-                    "[bold red]Failed to reset staged changes. Exiting.[/bold red]"
-                )
-                sys.exit(1)
-            else:
-                console.print("Staged changes have been reset. Proceeding...")
-        else:
-            console.print("Cannot proceed with staged changes. Exiting.")
-            sys.exit(0)
-    else:
-        console.print("[green]Repository has no staged changes. Good to go![/green]")
-
-
-def run_commit_workflow(repo: git.Repo):
-    """Handles the main logic for the 'commit' subcommand."""
-    console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
-
-    # 1. Check for staged changes
-    prepare_repo(repo)
-
-    # 2. Get Git Status and check for *any* changes
-    try:
-        status = get_git_status(repo)
-        if not status.changed_files and not status.untracked_files:
+    def prepare_repo(self):
+        if has_staged_changes(self.repo):
+            console.print("[bold yellow]Warning:[/bold yellow] Found staged changes.")
             console.print(
-                "[yellow]No unstaged changes or untracked files found to process. Exiting.[/yellow]"
+                "VibeGit works best with unstaged changes only, as it needs to stage changes itself."
+            )
+
+            questions = [
+                inquirer.Confirm(
+                    "reset",
+                    message="Do you want to unstage (reset) all currently staged changes?",
+                    default=False,
+                ),
+            ]
+            answers = inquirer.prompt(questions)
+
+            if answers and answers["reset"]:
+                if not reset_staged_changes(self.repo):
+                    # Try one more time? The prompt requested exiting if first attempt fails.
+                    console.print(
+                        "[bold red]Failed to reset staged changes. Exiting.[/bold red]"
+                    )
+                    sys.exit(1)
+                else:
+                    console.print("Staged changes have been reset. Proceeding...")
+            else:
+                console.print("Cannot proceed with staged changes. Exiting.")
+                sys.exit(0)
+        else:
+            console.print(
+                "[green]Repository has no staged changes. Good to go![/green]"
+            )
+
+    def get_git_status(self):
+        # 2. Get Git Status and check for *any* changes
+        try:
+            status = get_git_status(self.repo)
+            if not status.changed_files and not status.untracked_files:
+                console.print(
+                    "[yellow]No unstaged changes or untracked files found to process. Exiting.[/yellow]"
+                )
+                sys.exit(0)
+            console.print(
+                f"Found {len(status.changed_files)} changed and {len(status.untracked_files)} untracked files."
+            )
+            return status
+        except Exception as e:
+            console.print(f"[bold red]Error getting Git status: {e}[/bold red]")
+            sys.exit(1)
+
+    def generate_commit_proposals(
+        self, status: GitStatusSummary
+    ) -> tuple[CommitProposalContext, CommitProposalsResultSchema | None]:
+        formatter = self.config.context_formatting.get_context_formatter(
+            user_instructions=get_user_instructions(self.repo)
+        )
+        ctx = CommitProposalContext(git_status=status)
+
+        console.print("Formatting changes for AI analysis...")
+        try:
+            formatted_context = formatter.format_changes(ctx)
+            # print(formatted_context) # Debugging: Uncomment to see what's sent to the LLM
+        except Exception as e:
+            console.print(f"[bold red]Error formatting changes for AI: {e}[/bold red]")
+            sys.exit(1)
+
+        if not ctx.change_id_to_ref:
+            console.print(
+                "[yellow]No detectable changes found in the changes. Cannot generate proposals. Exiting.[/yellow]"
             )
             sys.exit(0)
-        console.print(
-            f"Found {len(status.changed_files)} changed and {len(status.untracked_files)} untracked files."
+
+        console.print(f"Identified {len(ctx.change_id_to_ref)} change(s).")
+
+        console.print("Generating commit proposals...")
+        ai = CommitProposalAI(
+            config.model.get_chat_model(),
+            allow_excluding_changes=config.allow_excluding_changes,
         )
-    except Exception as e:
-        console.print(f"[bold red]Error getting Git status: {e}[/bold red]")
-        sys.exit(1)
 
-    # 3. Prepare AI Context
-    formatter = config.context_formatting.get_context_formatter(
-        user_instructions=get_user_instructions(repo)
-    )
-    ctx = CommitProposalContext(git_status=status)
+        try:
+            result = ai.propose_commits(formatted_context)
+        except Exception as e:
+            console.print(
+                f"[bold red]Error getting commit proposals from AI: {e}[/bold red]"
+            )
+            sys.exit(1)
 
-    console.print("Formatting changes for AI analysis...")
-    try:
-        formatted_context = formatter.format_changes(ctx)
-        # print(formatted_context) # Debugging: Uncomment to see what's sent to the LLM
-    except Exception as e:
-        console.print(f"[bold red]Error formatting changes for AI: {e}[/bold red]")
-        sys.exit(1)
+        if not result:
+            console.print(
+                "[red]Error: Model did not return any results. Exiting.[/red]"
+            )
+            sys.exit(1)
 
-    if not ctx.change_id_to_ref:
+        if not result.commit_proposals:
+            console.print(
+                "[yellow]AI did not generate any commit proposals. Exiting.[/yellow]"
+            )
+            sys.exit(0)
+
         console.print(
-            "[yellow]No detectable changes found in the changes. Cannot generate proposals. Exiting.[/yellow]"
+            f"[green]Generated {len(result.commit_proposals)} commit proposal(s).[/green]"
         )
-        sys.exit(0)
 
-    console.print(f"Identified {len(ctx.change_id_to_ref)} change(s).")
+        try:
+            ctx.validate_commit_proposal(result)
+            console.print("[green]AI proposals validated successfully.[/green]")
+        except ValueError as e:
+            print(formatted_context)
+            console.print(f"[bold red]AI proposal validation failed: {e}[/bold red]")
+            console.print("Cannot proceed with invalid proposals. Exiting.")
+            sys.exit(1)
 
-    # 4. Get Commit Proposals from AI
-    console.print("Generating commit proposals...")
-    ai = CommitProposalAI(
-        config.model.get_chat_model(),
-        allow_excluding_changes=config.allow_excluding_changes,
-    )
-    result: CommitProposalListSchema | IncompleteCommitProposalListSchema | None = None
+        return ctx, result
 
-    try:
-        result = ai.propose_commits(formatted_context)
-    except Exception as e:
-        console.print(
-            f"[bold red]Error getting commit proposals from AI: {e}[/bold red]"
-        )
-        # Consider more specific error handling based on potential AI exceptions
-        sys.exit(1)
+    def _format_change_type(self, file: PatchedFile) -> str:
+        if file.is_added_file:
+            return "[green]A[/green]"
+        elif file.is_removed_file:
+            return "[red]D[/red]"
+        elif file.is_modified_file:
+            return "[yellow]M[/yellow]"
+        else:
+            return "[blue]U[/blue]"
 
-    if not result or not result.commit_proposals:
-        console.print(
-            "[yellow]AI did not generate any commit proposals. Exiting.[/yellow]"
-        )
-        sys.exit(0)
+    def _format_file(self, file: PatchedFile) -> str:
+        if file.is_binary_file:
+            summary = "binary"
+        else:
+            lines_added = lines_removed = 0
 
-    console.print(
-        f"[green]Generated {len(result.commit_proposals)} commit proposal(s).[/green]"
-    )
+            for hunk in file:
+                lines_added += hunk.added
+                lines_removed += hunk.removed
 
-    # 5. Validate Proposals
-    try:
-        ctx.validate_commit_proposal(result)
-        console.print("[green]AI proposals validated successfully.[/green]")
-    except ValueError as e:
-        print(formatted_context)
-        console.print(f"[bold red]AI proposal validation failed: {e}[/bold red]")
-        console.print("Cannot proceed with invalid proposals. Exiting.")
-        sys.exit(1)
+            summary = f"[green]+{lines_added}[/green], [red]-{lines_removed}[/red]"
 
-    # 6. Interactive Workflow Choice
-    questions = [
-        inquirer.List(
-            "mode",
-            message="How do you want to proceed?",
-            choices=[
-                ("Apply all proposed commits automatically (#yolo)", "yolo"),
-                (
-                    "Interactive: Review and commit each proposal one by one (opens editor)",
-                    "interactive",
-                ),
-                ("Summary: Show a summary of all proposals first", "summary"),
-                ("Rerun VibeGit", "rerun"),
-                ("Quit: Exit without applying any proposals", "quit"),
-            ],
-            default="interactive",
-        ),
-    ]
-    answers = inquirer.prompt(questions)
-    mode = answers["mode"] if answers else "quit"
+        return f"{self._format_change_type(file)} {file.path} ({summary})"
 
-    if mode == "quit":
-        console.print("[yellow]Exiting as requested.[/yellow]")
-        sys.exit(0)
+    def _format_commit_proposal_changes(
+        self, ctx: CommitProposalContext, change_ids: list[int]
+    ) -> str:
+        file_diffs = ctx.get_file_diffs_from_change_ids(change_ids)
 
-    if mode == "rerun":
-        console.print("[yellow]Rerunning VibeGit...[/yellow]")
-        run_commit_workflow(repo)
-        sys.exit(0)
+        files = [self._format_file(file) for file in file_diffs]
 
-    if mode == "summary":
-        display_summary(result)
+        return "\n".join(files)
+
+    def display_commit_proposals_summary(
+        self, ctx: CommitProposalContext, result: CommitProposalsResultSchema
+    ):
+        """Displays a summary of the commit proposals."""
+        if not result or not result.commit_proposals:
+            console.print("[yellow]No commit proposals to display.[/yellow]")
+            return
+
+        table = Table(title="Commit Proposals Summary")
+        table.add_column("No.", style="dim", width=3)
+        table.add_column("Proposed Message", style="cyan", no_wrap=False)
+        table.add_column("Files", style="magenta")
+        table.add_column("Explanation", style="yellow", no_wrap=False)
+
+        for i, proposal in enumerate(result.commit_proposals):
+            table.add_row(
+                str(i + 1),
+                proposal.commit_message,
+                self._format_commit_proposal_changes(ctx, proposal.change_ids),
+                proposal.explanation,
+            )
+
+        console.print(table)
+
+        if (
+            isinstance(result, IncompleteCommitProposalsResultSchema)
+            and result.excluded_groups
+        ):
+            console.print()
+
+            table = Table(title="Excluded Changes")
+            table.add_column("Group No.", style="dim")
+            table.add_column("Changes", style="magenta")
+            table.add_column("Explanation", style="yellow", no_wrap=False, width=100)
+
+            for i, group in enumerate(result.excluded_groups):
+                if not group.change_ids:
+                    continue
+
+                table.add_row(
+                    str(i + 1),
+                    self._format_commit_proposal_changes(ctx, group.change_ids),
+                    group.explanation,
+                )
+
+            console.print(table)
+
+    def display_detailed_commit_proposals_summary(
+        self, result: CommitProposalsResultSchema
+    ):
+        """Displays a detailed summary of the commit proposals."""
+        raise NotImplementedError("Not implemented yet.")
 
         # After summary, ask again how to proceed (excluding summary itself)
         questions = [
@@ -341,7 +363,10 @@ def run_commit_workflow(repo: git.Repo):
             console.print("[yellow]Exiting as requested.[/yellow]")
             sys.exit(0)
 
-    if mode == "yolo":
+    def apply_all_commit_proposals(
+        self, ctx: CommitProposalContext, result: CommitProposalsResultSchema
+    ):
+        """Applies all commit proposals."""
         commit_proposals = result.commit_proposals
         console.print(
             f"\n[bold magenta]Entering #yolo Mode: Applying all {len(commit_proposals)} proposals...[/bold magenta]"
@@ -374,7 +399,7 @@ def run_commit_workflow(repo: git.Repo):
                 console.print(
                     "[cyan]Attempting to unstage changes from failed step...[/cyan]"
                 )
-                reset_staged_changes(repo)
+                reset_staged_changes(self.repo)
                 break
             except Exception as e:
                 console.print(
@@ -387,14 +412,39 @@ def run_commit_workflow(repo: git.Repo):
                 console.print(
                     "[cyan]Attempting to unstage changes from failed step...[/cyan]"
                 )
-                reset_staged_changes(repo)
+                reset_staged_changes(self.repo)
 
                 raise e
 
         result.commit_proposals = commit_proposals
 
-    elif mode == "interactive":
+    def display_final_summary(self):
+        final_status = get_git_status(self.repo)
+        if not final_status.changed_files and not final_status.untracked_files:
+            # Check if *staged* changes exist from failed editor commit etc.
+            if not has_staged_changes(self.repo):
+                console.print(
+                    "\n[bold green]VibeGit finished. Working directory is clean. 😎[/bold green]"
+                )
+            else:
+                console.print(
+                    "\n[bold yellow]VibeGit finished. There are still staged changes remaining.[/bold yellow]"
+                )
+        else:
+            console.print(
+                "\n[bold yellow]VibeGit finished. There are still unstaged changes or untracked files.[/bold yellow]"
+            )
+
+    def display_detailed_commit_proposal(self, proposal: CommitProposalSchema):
+        console.print(f"Detailed commit proposal: {proposal.commit_message}")
+        console.print(f"Changes: {proposal.change_ids}")
+        console.print(f"Explanation: {proposal.explanation}")
+
+    def run_interactive_commit_workflow(
+        self, ctx: CommitProposalContext, result: CommitProposalsResultSchema
+    ):
         console.print("\n[bold magenta]Entering Interactive Mode...[/bold magenta]")
+
         result_copy = deepcopy(result)
         total_proposals = len(result_copy.commit_proposals)
         committed_count = 0
@@ -406,7 +456,8 @@ def run_commit_workflow(repo: git.Repo):
 
             console.print("\n" + "=" * 40)
             console.print(f"[bold]Proposal {current_num} of {total_proposals}:[/bold]")
-            display_summary(result_copy)
+
+            self.display_detailed_commit_proposal(proposal)
 
             questions = [
                 inquirer.List(
@@ -433,7 +484,7 @@ def run_commit_workflow(repo: git.Repo):
 
                     console.print("[cyan]Opening editor for commit message...[/cyan]")
                     commit_successful = open_editor_for_commit(
-                        repo, proposal.commit_message
+                        self.repo, proposal.commit_message
                     )
 
                     if commit_successful:
@@ -459,7 +510,7 @@ def run_commit_workflow(repo: git.Repo):
                         ]
                         a_reset = inquirer.prompt(q_reset)
                         if a_reset and a_reset["reset_failed"]:
-                            reset_staged_changes(repo)
+                            reset_staged_changes(self.repo)
                         # Decide whether to continue or quit on failure? Let's continue for now.
                         # Optionally: Move skipped proposal to the end? For now, just keeps it at the front for next loop.
                         # To skip properly, we'd pop and potentially store elsewhere. Let's add a 'skip' choice.
@@ -492,8 +543,10 @@ def run_commit_workflow(repo: git.Repo):
                 console.print(
                     f"\n[bold magenta]Switching to Yolo Mode for the remaining {len(result_copy.commit_proposals)} proposals...[/bold magenta]"
                 )
+
                 initial_remaining_count = len(result_copy.commit_proposals)
                 yolo_successful = True
+
                 for i, p in enumerate(list(result_copy.commit_proposals)):
                     console.print(
                         f"\nApplying remaining proposal {i + 1} of {initial_remaining_count}: '{p.commit_message}'"
@@ -504,7 +557,7 @@ def run_commit_workflow(repo: git.Repo):
                         ctx.stage_commit_proposal(p)
                         console.print("[green]Changes staged successfully.[/green]")
                         console.print("[cyan]Creating commit...[/cyan]")
-                        repo.index.commit(p.commit_message)  # Yolo -> No editor
+                        self.repo.index.commit(p.commit_message)  # Yolo -> No editor
                         console.print("[green]Commit created successfully.[/green]")
                         result_copy.commit_proposals.pop(0)  # Remove from original list
                         committed_count += 1
@@ -518,7 +571,7 @@ def run_commit_workflow(repo: git.Repo):
                         console.print(
                             "[cyan]Attempting to unstage changes from failed step...[/cyan]"
                         )
-                        reset_staged_changes(repo)
+                        reset_staged_changes(self.repo)
                         yolo_successful = False
                         break
                     except Exception as e:
@@ -531,7 +584,7 @@ def run_commit_workflow(repo: git.Repo):
                         console.print(
                             "[cyan]Attempting to unstage changes from failed step...[/cyan]"
                         )
-                        reset_staged_changes(repo)
+                        reset_staged_changes(self.repo)
                         yolo_successful = False
                         break
                 if not yolo_successful:
@@ -545,8 +598,7 @@ def run_commit_workflow(repo: git.Repo):
                 break  # Exit interactive loop after 'all' attempt
 
             elif action == "summary":
-                display_summary(result_copy)
-                # Loop continues to show the current proposal again
+                self.display_detailed_commit_proposals_summary(result_copy)
 
             elif action == "quit":
                 console.print("[yellow]Quitting interactive mode.[/yellow]")
@@ -560,33 +612,67 @@ def run_commit_workflow(repo: git.Repo):
                 f"\n[yellow]Exited with {len(result_copy.commit_proposals)} proposals remaining.[/yellow]"
             )
 
-    # --- Final Summary ---
-    final_status = get_git_status(repo)
-    if not final_status.changed_files and not final_status.untracked_files:
-        # Check if *staged* changes exist from failed editor commit etc.
-        if not has_staged_changes(repo):
-            console.print(
-                "\n[bold green]VibeGit finished. Working directory is clean. 😎[/bold green]"
-            )
-        else:
-            console.print(
-                "\n[bold yellow]VibeGit finished. There are still staged changes remaining.[/bold yellow]"
-            )
-    else:
-        console.print(
-            "\n[bold yellow]VibeGit finished. There are still unstaged changes or untracked files.[/bold yellow]"
-        )
+    def run_commit_workflow(self):
+        """Handles the main logic for the 'commit' subcommand."""
+        console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
+
+        # 1. Check for staged changes
+        self.prepare_repo()
+
+        # 2. Get Git Status and check for *any* changes
+        status = self.get_git_status()
+
+        # 3. Generate Commit Proposals
+        ctx, result = self.generate_commit_proposals(status)
+
+        self.display_commit_proposals_summary(ctx, result)
+
+        # 6. Interactive Workflow Choice
+        questions = [
+            inquirer.List(
+                "mode",
+                message="How do you want to proceed?",
+                choices=[
+                    ("Apply all proposed commits automatically (#yolo)", "yolo"),
+                    (
+                        "Interactive: Review and commit each proposal one by one (opens editor)",
+                        "interactive",
+                    ),
+                    ("Show a detailed summary of all commit proposals", "summary"),
+                    ("Rerun VibeGit", "rerun"),
+                    ("Quit: Exit without applying any proposals", "quit"),
+                ],
+                default="interactive",
+            ),
+        ]
+        answers = inquirer.prompt(questions)
+        mode = answers["mode"] if answers else "quit"
+
+        if mode == "quit":
+            console.print("[yellow]Exiting as requested.[/yellow]")
+            sys.exit(0)
+
+        if mode == "rerun":
+            console.print("[yellow]Rerunning VibeGit...[/yellow]")
+            self.run_commit_workflow()
+            sys.exit(0)
+
+        if mode == "summary":
+            self.display_detailed_commit_proposals_summary(result)
+        if mode == "yolo":
+            self.apply_all_commit_proposals(ctx, result)
+
+        elif mode == "interactive":
+            self.run_interactive_commit_workflow(ctx, result)
+
+        self.display_final_summary()
 
 
-def run_commit(debug: bool = False):
-    # For now, only the 'commit' subcommand is implemented directly.
-    # Later, this could use argparse or Typer/Click to handle subcommands.
-    # Example: if args.subcommand == 'commit': await run_commit_workflow()
-
-    # Find Git repository
+def get_repo() -> git.Repo:
     try:
         repo = git.Repo(os.getcwd(), search_parent_directories=True)
         console.print(f"Found Git repository at: {repo.working_dir}")
+        return repo
     except git.InvalidGitRepositoryError:
         console.print("[bold red]Error: Invalid Git repository detected.[/bold red]")
         sys.exit(1)
@@ -596,8 +682,18 @@ def run_commit(debug: bool = False):
         )
         sys.exit(1)
 
+
+def run_commit(debug: bool = False):
+    # For now, only the 'commit' subcommand is implemented directly.
+    # Later, this could use argparse or Typer/Click to handle subcommands.
+    # Example: if args.subcommand == 'commit': await run_commit_workflow()
+
+    # Find Git repository
+    repo = get_repo()
+
     try:
-        run_commit_workflow(repo)
+        cli = InteractiveCLI(config, repo)
+        cli.run_commit_workflow()
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         sys.exit(1)
@@ -618,7 +714,8 @@ def run_commit(debug: bool = False):
 def cli(ctx):
     if not ctx.invoked_subcommand:
         console.print(
-            "[bold yellow]WARNING: If no command is provided, VibeGit will run the commit workflow. This is due to change. We recommend running VibeGit with the 'commit' command explicitly.[/bold yellow]"
+            "[bold yellow]WARNING: If no command is provided, VibeGit will run the commit workflow. "
+            "This is due to change. We recommend running VibeGit with the 'commit' command explicitly.[/bold yellow]"
         )
         run_commit()
 
