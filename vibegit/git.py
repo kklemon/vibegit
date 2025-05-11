@@ -147,9 +147,7 @@ class CommitProposalContext:
 
         return file_change_refs_by_file
 
-    def get_file_diffs_from_change_ids(
-        self, change_ids: list[int]
-    ) -> list[PatchedFile]:
+    def get_file_diffs_from_change_ids(self, change_ids: list[int]) -> list[FileDiff]:
         file_change_refs_by_file = self.group_changes_by_file(change_ids)
 
         # Create a new file with the changes of each group
@@ -162,7 +160,12 @@ class CommitProposalContext:
                 )
                 patch_set = PatchSet.from_string(file_diff.original_diff)
                 assert len(patch_set) == 1, "Expected exactly one file in patch set"
-                file_diffs.append(patch_set[0])
+                file_diffs.append(
+                    FileDiff(
+                        patch_set[0],
+                        file_diff.original_diff,
+                    )
+                )
                 continue
 
             assert len(group) > 0
@@ -174,7 +177,9 @@ class CommitProposalContext:
                 if change_file_ref.hunk:
                     # Ensure the hunk ends with a newline
                     patched_file.append(change_file_ref.hunk)
-            file_diffs.append(patched_file)
+            file_diffs.append(
+                FileDiff(patched_file, str(patched_file).strip() + "\n\n\n")
+            )
 
         return file_diffs
 
@@ -182,9 +187,9 @@ class CommitProposalContext:
         file_diffs = self.get_file_diffs_from_change_ids(commit_proposal.change_ids)
 
         # Stage the files
-        for patched_file in file_diffs:
+        for file_diff in file_diffs:
             with tempfile.NamedTemporaryFile(delete=False, buffering=0) as f:
-                f.write((str(patched_file).strip() + "\n\n\n").encode("utf-8"))
+                f.write(file_diff.original_diff.encode("utf-8"))
                 f.flush()
 
                 try:
@@ -192,7 +197,7 @@ class CommitProposalContext:
                         ["git", "apply", "--cached", f.name]
                     )
                 except Exception as e:
-                    print(f"Error staging file: {patched_file}. Patch file: {f.name}")
+                    print(f"Error staging file {file_diff.patched_file.path}: {e}")
                     raise e
 
     def commit_commit_proposal(self, commit_proposal: CommitProposalSchema):

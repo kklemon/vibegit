@@ -16,6 +16,7 @@ from vibegit.ai import CommitProposalAI
 from vibegit.config import CONFIG_PATH, Config
 from vibegit.git import (
     CommitProposalContext,
+    FileDiff,
     GitStatusSummary,
     get_git_status,
 )
@@ -261,19 +262,20 @@ class InteractiveCLI:
         else:
             return "[blue]U[/blue]"
 
-    def _format_file(self, file: PatchedFile) -> str:
-        if file.is_binary_file:
+    def _format_file(self, file_diff: FileDiff) -> str:
+        patched_file = file_diff.patched_file
+        if patched_file.is_binary_file:
             summary = "binary"
         else:
             lines_added = lines_removed = 0
 
-            for hunk in file:
+            for hunk in file_diff.patched_file:
                 lines_added += hunk.added
                 lines_removed += hunk.removed
 
             summary = f"[green]+{lines_added}[/green], [red]-{lines_removed}[/red]"
 
-        return f"{self._format_change_type(file)} {file.path} ({summary})"
+        return f"{self._format_change_type(patched_file)} {patched_file.path} ({summary})"
 
     def _format_commit_proposal_changes(
         self, ctx: CommitProposalContext, change_ids: list[int]
