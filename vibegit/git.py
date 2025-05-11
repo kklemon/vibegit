@@ -60,13 +60,11 @@ class GitStatusSummary:
 
 
 def get_git_status(repo) -> GitStatusSummary:
-    # --- Get Untracked Files ---
     # repo.untracked_files provides a list of files Git doesn't track
     untracked_files = [
         UntrackedGitFile(repo, filename) for filename in repo.untracked_files
     ]
 
-    # --- Get Changed Files (Staged and Unstaged) ---
     changed_files = []  # Using a set to avoid duplicates
 
     # Compare the index (staging area) with the HEAD commit for staged changes
@@ -125,10 +123,12 @@ class CommitProposalContext:
                     )
                 change_ids.add(change_id)
 
-    def stage_commit_proposal(self, commit_proposal: CommitProposalSchema):
+    def group_changes_by_file(
+        self, change_ids: list[int]
+    ) -> dict[FileDiff, list[FileChangeReference]]:
         # Dereference the changes
         change_file_refs = [
-            self.change_id_to_ref[change_id] for change_id in commit_proposal.change_ids
+            self.change_id_to_ref[change_id] for change_id in change_ids
         ]
 
         # Group by file
@@ -145,15 +145,24 @@ class CommitProposalContext:
                     change_file_ref
                 )
 
+        return file_change_refs_by_file
+
+    def get_file_diffs_from_change_ids(
+        self, change_ids: list[int]
+    ) -> list[PatchedFile]:
+        file_change_refs_by_file = self.group_changes_by_file(change_ids)
+
         # Create a new file with the changes of each group
-        files = []
+        file_diffs: list[PatchedFile] = []
 
         for file_diff, group in file_change_refs_by_file.items():
             if file_diff.patched_file.is_binary_file:
                 assert len(group) == 1, (
                     "Binary files should only have one change by our logic"
                 )
-                files.append(file_diff.original_diff)
+                patch_set = PatchSet.from_string(file_diff.original_diff)
+                assert len(patch_set) == 1, "Expected exactly one file in patch set"
+                file_diffs.append(patch_set[0])
                 continue
 
             assert len(group) > 0
@@ -165,10 +174,15 @@ class CommitProposalContext:
                 if change_file_ref.hunk:
                     # Ensure the hunk ends with a newline
                     patched_file.append(change_file_ref.hunk)
-            files.append(patched_file)
+            file_diffs.append(patched_file)
+
+        return file_diffs
+
+    def stage_commit_proposal(self, commit_proposal: CommitProposalSchema):
+        file_diffs = self.get_file_diffs_from_change_ids(commit_proposal.change_ids)
 
         # Stage the files
-        for patched_file in files:
+        for patched_file in file_diffs:
             with tempfile.NamedTemporaryFile(delete=False, buffering=0) as f:
                 f.write((str(patched_file).strip() + "\n\n\n").encode("utf-8"))
                 f.flush()
@@ -207,20 +221,20 @@ class GitContextFormatter:
         return truncated_line
 
     def _format_file(self, file: BaseGitFile, ctx: CommitProposalContext):
-        diff = file.get_diff()
+        file_diff = file.get_diff()
 
-        if diff.patched_file.is_binary_file:
+        if file_diff.patched_file.is_binary_file:
             # If it's a binary file, add the change id to the first line
             # and use a placeholder for the content
             change_id = ctx.change_counter
 
-            patch_info = diff.patched_file.patch_info
+            patch_info = file_diff.patched_file.patch_info
             assert patch_info is not None, "Expected patch info but found None"
             patch_info_lines = str(patch_info).splitlines()
             patch_info_lines[0] = f"{patch_info_lines[0]}  # Change ID: {change_id}"
 
             ctx.change_counter += 1
-            ctx.change_id_to_ref[change_id] = FileChangeReference(diff, None)
+            ctx.change_id_to_ref[change_id] = FileChangeReference(file_diff, None)
 
             result = "\n".join(
                 [
@@ -231,22 +245,22 @@ class GitContextFormatter:
 
             return result
 
-        for hunk in diff.patched_file:
+        for hunk in file_diff.patched_file:
             change_id = ctx.change_counter
             hunk.section_header = f"  # Change ID: {change_id}"
             ctx.change_counter += 1
-            ctx.change_id_to_ref[change_id] = FileChangeReference(diff, hunk)
+            ctx.change_id_to_ref[change_id] = FileChangeReference(file_diff, hunk)
 
-        formatted_diff_lines = str(diff.patched_file).splitlines()
+        formatted_diff_lines = str(file_diff.patched_file).splitlines()
 
-        if not len(diff.patched_file):
+        if not len(file_diff.patched_file):
             change_id = ctx.change_counter
-            
+
             formatted_diff_lines[0] = (
                 formatted_diff_lines[0] + f"  # Change ID: {change_id}"
             )
             ctx.change_counter += 1
-            ctx.change_id_to_ref[change_id] = FileChangeReference(diff, None)
+            ctx.change_id_to_ref[change_id] = FileChangeReference(file_diff, None)
 
         if self.truncate_lines:
             formatted_diff_lines = [
