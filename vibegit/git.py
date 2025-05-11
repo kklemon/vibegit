@@ -162,8 +162,8 @@ class CommitProposalContext:
                 assert len(patch_set) == 1, "Expected exactly one file in patch set"
                 file_diffs.append(
                     FileDiff(
-                        patch_set[0],
-                        file_diff.original_diff,
+                        patched_file=patch_set[0],
+                        original_diff=file_diff.original_diff,
                     )
                 )
                 continue
