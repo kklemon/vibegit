@@ -307,7 +307,9 @@ class InteractiveCLI:
 
             summary = f"[green]+{lines_added}[/green], [red]-{lines_removed}[/red]"
 
-        return f"{self._format_change_type(patched_file)} {patched_file.path} ({summary})"
+        return (
+            f"{self._format_change_type(patched_file)} {patched_file.path} ({summary})"
+        )
 
     def _format_commit_proposal_changes(
         self, ctx: CommitProposalContext, change_ids: list[int]
