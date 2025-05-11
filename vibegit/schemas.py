@@ -2,8 +2,8 @@ from pydantic import BaseModel, Field
 
 
 class CommitProposalSchema(BaseModel):
-    reasoning: str = Field(
-        description="A reasoning for the decision of grouping these changes together."
+    explanation: str = Field(
+        description="An explanation for the decision of grouping these changes together."
     )
     commit_message: str = Field(description="The proposed commit message")
     change_ids: list[int] = Field(
@@ -11,22 +11,23 @@ class CommitProposalSchema(BaseModel):
     )
 
 
-class CommitProposalListSchema(BaseModel):
+class CommitProposalsResultSchema(BaseModel):
     commit_proposals: list[CommitProposalSchema] = Field(
         description="A list of commit proposals"
     )
 
 
 class ExcludeChangesSchema(BaseModel):
-    reasoning: str = Field(
-        description="A reasoning for the decision of excluding these changes."
+    explanation: str = Field(
+        description="An explanation for the decision of excluding these changes."
     )
     change_ids: list[int] = Field(
         description="A list of change IDs that should not be included in any commit as they may be incomplete or not ready to be committed."
     )
 
 
-class IncompleteCommitProposalListSchema(CommitProposalListSchema):
-    exclude: ExcludeChangesSchema = Field(
-        description="The changes to exclude from the commit proposals."
+class IncompleteCommitProposalsResultSchema(CommitProposalsResultSchema):
+    excluded_groups: list[ExcludeChangesSchema] = Field(
+        default_factory=list,
+        description="Groups of changes that were excluded from the commit proposals.",
     )

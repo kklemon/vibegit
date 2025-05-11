@@ -6,7 +6,7 @@ import tempfile
 
 import git
 from unidiff import Hunk, PatchedFile, PatchSet
-from vibegit.schemas import CommitProposalListSchema, CommitProposalSchema
+from vibegit.schemas import CommitProposalsResultSchema, CommitProposalSchema
 
 
 @dataclass
@@ -106,7 +106,7 @@ class CommitProposalContext:
     change_counter: int = 0
     change_id_to_ref: dict[int, FileChangeReference] = field(default_factory=dict)
 
-    def validate_commit_proposal(self, commit_proposals: CommitProposalListSchema):
+    def validate_commit_proposal(self, commit_proposals: CommitProposalsResultSchema):
         # First, verify that all referenced changes exist
         for proposal in commit_proposals.commit_proposals:
             for change_id in proposal.change_ids:

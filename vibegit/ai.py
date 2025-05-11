@@ -2,22 +2,25 @@ from typing import cast
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from vibegit.prompts import build_system_prompt
-from vibegit.schemas import CommitProposalListSchema, IncompleteCommitProposalListSchema
+from vibegit.schemas import (
+    CommitProposalsResultSchema,
+    IncompleteCommitProposalsResultSchema,
+)
 
 
 class CommitProposalAI:
     def __init__(self, model: BaseChatModel, allow_excluding_changes: bool = False):
         schema = (
-            IncompleteCommitProposalListSchema
+            IncompleteCommitProposalsResultSchema
             if allow_excluding_changes
-            else CommitProposalListSchema
+            else CommitProposalsResultSchema
         )
         self.model = model.with_structured_output(schema)
         self.allow_excluding_changes = allow_excluding_changes
 
     def propose_commits(
         self, context: str
-    ) -> CommitProposalListSchema | IncompleteCommitProposalListSchema | None:
+    ) -> CommitProposalsResultSchema | IncompleteCommitProposalsResultSchema | None:
         result = self.model.invoke(
             [
                 {
@@ -32,6 +35,6 @@ class CommitProposalAI:
             return None
 
         if self.allow_excluding_changes:
-            return cast(IncompleteCommitProposalListSchema, result)
+            return cast(IncompleteCommitProposalsResultSchema, result)
         else:
-            return cast(CommitProposalListSchema, result)
+            return cast(CommitProposalsResultSchema, result)

@@ -21,13 +21,16 @@ COMPLETE_FORMAT_DESCRIPTION = """
 INCOMPLETE_FORMAT_DESCRIPTION = """
 ```json
 {
-  "exclude": {
-    "reasoning": "Explanation for excluding changes X, Y, and Z.",
-    "change_ids": [X, Y, Z]
-  },
+  "excluded_groups": [
+    {
+      "explanation": "Changes contain print debug statements that should be removed before committing.",
+      "change_ids": [F, G]
+    },
+    // ... more excluded groups as needed
+  ],
   "commit_proposals": [
     {
-      "reasoning": "Explanation for grouping changes A, B, and C.",
+      "explanation": "Explanation for grouping changes A, B, and C.",
       "commit_message": "Subject line summarizing changes in changes A, B, C\n\nOptional body providing more details.",
       "change_ids": [A, B, C]
     }
@@ -36,7 +39,7 @@ INCOMPLETE_FORMAT_DESCRIPTION = """
 }
 ```
 
-If you identify changes that are not ready to be committed, for instance, because they are incomplete or contain obvious bugs, you should exclude them from the commit proposals by providing a `reasoning` and a list of `change_ids`.
+If you identify changes that are not ready to be committed, e.g. because they are incomplete or contain obvious bugs, exclude them from the commit proposals. Group those changes logically and provide these groups under the `excluded_groups` key. For each group, provide a list of excluded `change_id` and an `explanation` for why they were excluded.
 """.strip()
 
 COMMIT_PROPOSAL_SYSTEM_PROMPT = """
