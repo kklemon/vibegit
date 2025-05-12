@@ -68,6 +68,9 @@ check_for_update()
 
 
 def get_config() -> Config:
+    # Check if this is first run and run wizard if needed
+    wizard_ran = run_wizard_if_needed()
+
     try:
         config = Config()
         return config
