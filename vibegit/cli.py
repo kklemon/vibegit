@@ -174,6 +174,8 @@ class InteractiveCLI:
     def __init__(self, config: Config, repo: git.Repo):
         self.config = config
         self.repo = repo
+        self.result: CommitProposalsResultSchema | None = None
+        self.ctx: CommitProposalContext | None = None
 
     def prepare_repo(self):
         if has_staged_changes(self.repo):
@@ -317,20 +319,18 @@ class InteractiveCLI:
             f"{self._format_change_type(patched_file)} {patched_file.path} ({summary})"
         )
 
-    def _format_commit_proposal_changes(
-        self, ctx: CommitProposalContext, change_ids: list[int]
-    ) -> str:
-        file_diffs = ctx.get_file_diffs_from_change_ids(change_ids)
+    def _format_commit_proposal_changes(self, change_ids: list[int]) -> str:
+        file_diffs = self.ctx.get_file_diffs_from_change_ids(change_ids)
 
         files = [self._format_file(file) for file in file_diffs]
 
         return "\n".join(files)
 
     def display_commit_proposals_summary(
-        self, ctx: CommitProposalContext, result: CommitProposalsResultSchema
+        self,
     ):
         """Displays a summary of the commit proposals."""
-        if not result or not result.commit_proposals:
+        if not self.result or not self.result.commit_proposals:
             console.print("[yellow]No commit proposals to display.[/yellow]")
             return
 
@@ -340,19 +340,19 @@ class InteractiveCLI:
         table.add_column("Files", style="magenta")
         table.add_column("Explanation", style="yellow", no_wrap=False)
 
-        for i, proposal in enumerate(result.commit_proposals):
+        for i, proposal in enumerate(self.result.commit_proposals):
             table.add_row(
                 str(i + 1),
                 proposal.commit_message,
-                self._format_commit_proposal_changes(ctx, proposal.change_ids),
+                self._format_commit_proposal_changes(proposal.change_ids),
                 proposal.explanation,
             )
 
         console.print(table)
 
         if (
-            isinstance(result, IncompleteCommitProposalsResultSchema)
-            and result.excluded_groups
+            isinstance(self.result, IncompleteCommitProposalsResultSchema)
+            and self.result.excluded_groups
         ):
             console.print()
 
@@ -361,55 +361,113 @@ class InteractiveCLI:
             table.add_column("Changes", style="magenta")
             table.add_column("Explanation", style="yellow", no_wrap=False, width=100)
 
-            for i, group in enumerate(result.excluded_groups):
+            for i, group in enumerate(self.result.excluded_groups):
                 if not group.change_ids:
                     continue
 
                 table.add_row(
                     str(i + 1),
-                    self._format_commit_proposal_changes(ctx, group.change_ids),
+                    self._format_commit_proposal_changes(group.change_ids),
                     group.explanation,
                 )
 
             console.print(table)
 
     def display_detailed_commit_proposals_summary(
-        self, result: CommitProposalsResultSchema
+        self,
     ):
-        """Displays a detailed summary of the commit proposals."""
-        raise NotImplementedError("Not implemented yet.")
+        """Displays a detailed summary of the commit proposals in 'less' pager."""
+        if not self.result or not self.result.commit_proposals:
+            console.print("[yellow]No commit proposals to display.[/yellow]")
+            return
 
-        # After summary, ask again how to proceed (excluding summary itself)
-        questions = [
-            inquirer.List(
-                "mode_after_summary",
-                message="How do you want to proceed now?",
-                choices=[
-                    ("Apply all proposed commits automatically (#yolo)", "yolo"),
-                    (
-                        "Interactive: Review and commit one by one (opens editor)",
-                        "interactive",
-                    ),
-                    (
-                        "Show a detailed summary of the commit proposals",
-                        "detailed_summary",
-                    ),
-                    ("Quit", "quit"),
-                ],
-                default="interactive",
-            ),
-        ]
-        answers = inquirer.prompt(questions)
-        mode = answers["mode_after_summary"] if answers else "quit"
-        if mode == "quit":
-            console.print("[yellow]Exiting as requested.[/yellow]")
-            sys.exit(0)
+        # Create content to display in less
+        content = []
+
+        for i, proposal in enumerate(self.result.commit_proposals):
+            # Add a separator and proposal header with colors
+            content.append("\033[1;36m" + "=" * 80 + "\033[0m")  # Bright cyan
+            content.append(
+                f"\033[1;32mCOMMIT PROPOSAL {i + 1} OF {len(self.result.commit_proposals)}\033[0m"
+            )  # Bright green
+            content.append("\033[1;36m" + "=" * 80 + "\033[0m")  # Bright cyan
+
+            # Add commit message with color
+            content.append(
+                f"\033[1;33mCommit Message:\033[0m {proposal.commit_message}"
+            )  # Yellow label
+            content.append("")
+
+            # Add explanation with color
+            content.append(
+                f"\033[1;35mExplanation:\033[0m {proposal.explanation}"
+            )  # Magenta label
+            content.append("")
+
+            # Add separator before changes with color
+            content.append("\033[1;34m" + "-" * 80 + "\033[0m")  # Blue
+            content.append("\033[1;34mCHANGES:\033[0m")  # Blue
+            content.append("\033[1;34m" + "-" * 80 + "\033[0m")  # Blue
+
+            # Get and format all file diffs for this proposal
+            file_diffs = self.ctx.get_file_diffs_from_change_ids(proposal.change_ids)
+
+            for file_diff in file_diffs:
+                # Get original git diff to preserve colors and formatting
+                content.append(file_diff.original_diff)
+                content.append("")
+
+            # Add extra newline between proposals
+            content.append("\n")
+
+        # If there are excluded changes, show them too with colors
+        if (
+            isinstance(self.result, IncompleteCommitProposalsResultSchema)
+            and self.result.excluded_groups
+        ):
+            content.append("\033[1;31m" + "=" * 80 + "\033[0m")  # Red
+            content.append("\033[1;31mEXCLUDED CHANGES\033[0m")  # Red
+            content.append("\033[1;31m" + "=" * 80 + "\033[0m")  # Red
+
+            for i, group in enumerate(self.result.excluded_groups):
+                if not group.change_ids:
+                    continue
+
+                content.append(f"\033[1;33mExcluded Group {i + 1}:\033[0m")  # Yellow
+                content.append(
+                    f"\033[1;35mExplanation:\033[0m {group.explanation}"
+                )  # Magenta label
+                content.append("")
+                content.append("\033[1;31m" + "-" * 80 + "\033[0m")  # Red
+
+                # Get and format all file diffs for this excluded group
+                file_diffs = self.ctx.get_file_diffs_from_change_ids(group.change_ids)
+
+                for file_diff in file_diffs:
+                    content.append(file_diff.original_diff)
+                    content.append("")
+
+        # Write content to temporary file
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+            temp_file.write("\n".join(content))
+            temp_path = temp_file.name
+
+        try:
+            # Open less with the content
+            subprocess.run(["less", "-R", temp_path])
+        finally:
+            # Clean up temporary file
+            import os
+
+            os.unlink(temp_path)
+
+        self.prompt_main_workflow()
 
     def apply_all_commit_proposals(
-        self, ctx: CommitProposalContext, result: CommitProposalsResultSchema
+        self,
     ):
         """Applies all commit proposals."""
-        commit_proposals = result.commit_proposals
+        commit_proposals = self.result.commit_proposals
         console.print(
             f"\n[bold magenta]Entering #yolo Mode: Applying all {len(commit_proposals)} proposals...[/bold magenta]"
         )
@@ -482,12 +540,10 @@ class InteractiveCLI:
         console.print(f"Changes: {proposal.change_ids}")
         console.print(f"Explanation: {proposal.explanation}")
 
-    def run_interactive_commit_workflow(
-        self, ctx: CommitProposalContext, result: CommitProposalsResultSchema
-    ):
+    def run_interactive_commit_workflow(self):
         console.print("\n[bold magenta]Entering Interactive Mode...[/bold magenta]")
 
-        result_copy = deepcopy(result)
+        result_copy = deepcopy(self.result)
         total_proposals = len(result_copy.commit_proposals)
         committed_count = 0
 
@@ -521,7 +577,7 @@ class InteractiveCLI:
             if action == "commit":
                 try:
                     console.print("[cyan]Staging changes for commit...[/cyan]")
-                    ctx.stage_commit_proposal(proposal)
+                    self.ctx.stage_commit_proposal(proposal)
                     console.print("[green]Changes staged.[/green]")
 
                     console.print("[cyan]Opening editor for commit message...[/cyan]")
@@ -596,7 +652,7 @@ class InteractiveCLI:
                     console.print(f"  Changes: {p.change_ids}")
                     try:
                         console.print("[cyan]Staging changes...[/cyan]")
-                        ctx.stage_commit_proposal(p)
+                        self.ctx.stage_commit_proposal(p)
                         console.print("[green]Changes staged successfully.[/green]")
                         console.print("[cyan]Creating commit...[/cyan]")
                         self.repo.index.commit(p.commit_message)  # Yolo -> No editor
@@ -640,7 +696,7 @@ class InteractiveCLI:
                 break  # Exit interactive loop after 'all' attempt
 
             elif action == "summary":
-                self.display_detailed_commit_proposals_summary(result_copy)
+                self.display_detailed_commit_proposals_summary()
 
             elif action == "quit":
                 console.print("[yellow]Quitting interactive mode.[/yellow]")
