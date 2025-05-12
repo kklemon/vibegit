@@ -193,6 +193,8 @@ class Config(BaseSettings):
     context_formatting: ContextFormattingConfig = ContextFormattingConfig()
     api_keys: dict[str, str] = Field(default_factory=dict)
     allow_excluding_changes: bool = True
+    watermark: bool = True
+
     model_config = SettingsConfigDict(toml_file=CONFIG_PATH)
 
     @model_validator(mode="after")

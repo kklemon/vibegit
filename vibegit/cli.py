@@ -225,7 +225,7 @@ class InteractiveCLI:
         formatter = self.config.context_formatting.get_context_formatter(
             user_instructions=get_user_instructions(self.repo)
         )
-        ctx = CommitProposalContext(git_status=status)
+        ctx = CommitProposalContext(git_status=status, watermark_commits=self.config.watermark)
 
         console.print("Formatting changes for AI analysis...")
         try:
