@@ -181,9 +181,7 @@ class CommitProposalContext:
                 if change_file_ref.hunk:
                     # Ensure the hunk ends with a newline
                     patched_file.append(change_file_ref.hunk)
-            file_diffs.append(
-                FileDiff(patched_file, str(patched_file))
-            )
+            file_diffs.append(FileDiff(patched_file, str(patched_file)))
 
         return file_diffs
 
