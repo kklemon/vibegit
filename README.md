@@ -65,6 +65,7 @@ VibeGit analyzes your diff, considers your branch name, peeks at your recent com
 
 *   🧠 **Semantic Hunk Grouping:** VibeGit doesn't just look at file names; it looks at *what the code does* to bundle related changes. It's like magic, but with more AI slop.
 *   ✍️ **AI-Generated Commit Messages:** Get sensible, well-formatted commit messages suggested for each group. Tweak them or use them as-is. Your commit log will suddenly look respectable.
+*   🔧 **Interactive Configuration Wizard:** A friendly setup process for first-time users that helps configure your preferred AI model and API keys.
 *   🤖 **Multiple Workflow Modes:**
     *   **YOLO Mode:** Feeling lucky? Automatically apply all of VibeGit's proposals. What could possibly go wrong?
     *   **Interactive Mode:** Review each proposed commit, edit the message in your default editor, and apply them one by one. For the cautious (or skeptical).
@@ -98,23 +99,28 @@ pipx install vibegit
 uvx vibegit
 ```
 
-### Set API Keys
+### Configuration
 
-Before your first vibe git'ing session, you may have to configure VibeGit. This can be done with the `vibegit config set <path> <value>` CLI command. You will most likely have to provide your LLM API key. Google's Gemini models are used by default, so you have will to set `api_keys.google_api_key` to your API key:
+When you run VibeGit for the first time, it will launch an interactive configuration wizard to help you set up the most important settings:
+
+- Choose an LLM model (Gemini, GPT, or custom)
+- Configure the necessary API keys
 
 ```bash
-vibegit config set api_keys.google_api_key <your-secret-api-key>
+# The wizard runs automatically on first use, but you can manually run it anytime with:
+vibegit config wizard
 ```
+Google's Gemini models are used by default for which you will need a Google AI Studio API key. If you don't have a Gemini API key yet, get one [here](https://aistudio.google.com/app/apikey).
 
-If you don't have a Gemini API key yet, get one [here](https://aistudio.google.com/app/apikey).
-
-## Configuration
+## Manual Configuration
 
 Use `vibegit config` to print the current configuration to the console.
 
-To set single configuration values, `vibegit config set <path> <value>` and provide the configuration path in dot notation, e.g. `model.name`.
+To set single configuration values, use `vibegit config set <path> <value>` and provide the configuration path in dot notation, e.g. `model.name`.
 
 For a more convenient editing of the whole configuration file, use `vibegit config open` which will open the config file in your system's default editor.
+
+Need to start over? Run the configuration wizard at any time with `vibegit config wizard` to reconfigure your settings.
 
 Below is a description of the most relevant configuration options.
 
