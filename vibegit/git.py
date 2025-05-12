@@ -193,7 +193,7 @@ class CommitProposalContext:
         # Stage the files
         for file_diff in file_diffs:
             with tempfile.NamedTemporaryFile(delete=False, buffering=0) as f:
-                f.write(file_diff.original_diff.encode("utf-8"))
+                f.write((file_diff.original_diff.strip() + "\n\n\n").encode("utf-8"))
                 f.flush()
 
                 try:
