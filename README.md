@@ -44,7 +44,7 @@ You could:
 ## Enter VibeGit: Your AI-Powered Git Housekeeper 🤖🧹
 
 > [!WARNING]
-> Brace yourself. What you're about to see now might feel like magic.
+> Brace yourself. What you're about to see might blow your mind.
 
 In your messy Git repository, just hit
 
