@@ -801,5 +801,19 @@ def path():
     print(CONFIG_PATH)
 
 
+@config_cli.command()
+def wizard():
+    """Run the configuration wizard to set up VibeGit interactively.
+
+    This command will launch the interactive configuration wizard
+    regardless of whether a config file already exists.
+    Use this to reconfigure VibeGit or change your model settings.
+    """
+    from vibegit.wizard import ConfigWizard
+
+    wizard = ConfigWizard()
+    wizard.run()
+
+
 if __name__ == "__main__":
     cli()
