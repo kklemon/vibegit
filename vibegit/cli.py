@@ -233,7 +233,9 @@ class InteractiveCLI:
         formatter = self.config.context_formatting.get_context_formatter(
             user_instructions=get_user_instructions(self.repo)
         )
-        ctx = CommitProposalContext(git_status=status, watermark_commits=self.config.watermark)
+        ctx = CommitProposalContext(
+            git_status=status, watermark_commits=self.config.watermark
+        )
 
         console.print("Formatting changes for AI analysis...")
         try:
@@ -479,12 +481,12 @@ class InteractiveCLI:
             console.print(f"  Changes: {proposal.change_ids}")
             try:
                 console.print("[cyan]Staging changes...[/cyan]")
-                ctx.stage_commit_proposal(proposal)
+                self.ctx.stage_commit_proposal(proposal)
                 console.print("[green]Changes staged successfully.[/green]")
 
                 console.print("[cyan]Creating commit...[/cyan]")
                 # In YOLO mode, commit directly without opening editor
-                ctx.commit_commit_proposal(proposal)
+                self.ctx.commit_commit_proposal(proposal)
                 console.print("[green]Commit created successfully.[/green]")
                 commit_proposals.pop(0)  # Remove applied proposal from original list
 
@@ -516,7 +518,7 @@ class InteractiveCLI:
 
                 raise e
 
-        result.commit_proposals = commit_proposals
+        self.result.commit_proposals = commit_proposals
 
     def display_final_summary(self):
         final_status = get_git_status(self.repo)
@@ -749,21 +751,35 @@ class InteractiveCLI:
         if mode == "quit":
             console.print("[yellow]Exiting as requested.[/yellow]")
             sys.exit(0)
-
         if mode == "rerun":
             console.print("[yellow]Rerunning VibeGit...[/yellow]")
             self.run_commit_workflow()
             sys.exit(0)
-
         if mode == "summary":
-            self.display_detailed_commit_proposals_summary(result)
+            self.display_detailed_commit_proposals_summary()
         if mode == "yolo":
-            self.apply_all_commit_proposals(ctx, result)
-
+            self.apply_all_commit_proposals()
         elif mode == "interactive":
-            self.run_interactive_commit_workflow(ctx, result)
+            self.run_interactive_commit_workflow()
 
         self.display_final_summary()
+
+    def run_commit_workflow(self):
+        """Handles the main logic for the 'commit' subcommand."""
+        console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
+
+        # 1. Check for staged changes
+        self.prepare_repo()
+
+        # 2. Get Git Status and check for *any* changes
+        status = self.get_git_status()
+
+        # 3. Generate Commit Proposals
+        self.ctx, self.result = self.generate_commit_proposals(status)
+
+        self.display_commit_proposals_summary()
+
+        self.prompt_main_workflow()
 
 
 def get_repo() -> git.Repo:
