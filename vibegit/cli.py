@@ -89,6 +89,8 @@ def get_config() -> Config:
         if answers and answers["reset"]:
             CONFIG_PATH.unlink()
             console.print("[green]Config reset successfully.[/green]")
+            console.print("Running configuration wizard...")
+            run_wizard_if_needed()  # Force wizard to run after reset
             return get_config()
         else:
             console.print("[red]Exiting.[/red]")
