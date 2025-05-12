@@ -712,22 +712,7 @@ class InteractiveCLI:
                 f"\n[yellow]Exited with {len(result_copy.commit_proposals)} proposals remaining.[/yellow]"
             )
 
-    def run_commit_workflow(self):
-        """Handles the main logic for the 'commit' subcommand."""
-        console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
-
-        # 1. Check for staged changes
-        self.prepare_repo()
-
-        # 2. Get Git Status and check for *any* changes
-        status = self.get_git_status()
-
-        # 3. Generate Commit Proposals
-        ctx, result = self.generate_commit_proposals(status)
-
-        self.display_commit_proposals_summary(ctx, result)
-
-        # 6. Interactive Workflow Choice
+    def prompt_main_workflow(self):
         questions = [
             inquirer.List(
                 "mode",
