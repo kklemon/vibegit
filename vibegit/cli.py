@@ -26,6 +26,7 @@ from vibegit.schemas import (
     IncompleteCommitProposalsResultSchema,
 )
 from vibegit.utils import compare_versions, get_version
+from vibegit.wizard import run_wizard_if_needed
 
 # Temporary fix. See https://github.com/grpc/grpc/issues/37642
 # Update: Doesn't seem to work.
