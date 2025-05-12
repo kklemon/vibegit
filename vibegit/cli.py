@@ -748,8 +748,6 @@ class InteractiveCLI:
         elif mode == "interactive":
             self.run_interactive_commit_workflow()
 
-        self.display_final_summary()
-
     def run_commit_workflow(self):
         """Handles the main logic for the 'commit' subcommand."""
         console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
@@ -766,6 +764,8 @@ class InteractiveCLI:
         self.display_commit_proposals_summary()
 
         self.prompt_main_workflow()
+
+        self.display_final_summary()
 
 
 def get_repo() -> git.Repo:
