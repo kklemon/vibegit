@@ -83,6 +83,7 @@ AI proposals validated successfully.
    Quit: Exit without applying any proposals
 
 ```
+<img alt="image showing terminal output as above but with colors" src="resources/terminal-with-colors.png">
 
 ✨ **And it *automagically* groups related changes (hunks) together based on their *semantic meaning*!** ✨
 
