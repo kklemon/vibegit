@@ -753,9 +753,6 @@ class InteractiveCLI:
         elif mode == "interactive":
             self.run_interactive_commit_workflow()
 
-    def run_interactive_commit_workflow(self):
-        # ... rest of the method remains the same ...
-
     def run_commit_workflow(self, debug: bool = False):
         """Handles the main logic for the 'commit' subcommand."""
         console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
