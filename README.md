@@ -17,11 +17,11 @@
 
 <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0;">
   <div style="text-align: center;">
-    <img src="resources/before-vibegit.png" style="max-width: 100%; height: auto; max-height: 300px;">
+    <img src="resources/before-vibegit.png" style="max-width: 45%; height: auto; max-height: 300px;">
     <p>^ You before discovering VibeGit</p>
   </div>
   <div style="text-align: center;">
-    <img src="resources/after-vibegit.png" style="max-width: 100%; height: auto; max-height: 300px;">
+    <img src="resources/after-vibegit.png" style="max-width: 45%; height: auto; max-height: 300px;">
     <p>^ You after discovering VibeGit</p>
   </div>
 </div>
