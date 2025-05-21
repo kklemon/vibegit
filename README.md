@@ -53,7 +53,6 @@ In your messy Git repository, just hit
 ```bash
 vibegit commit
 ```
-<!-- TODO: add colors to console output -->
 ```
 Found Git repository at: [redacted]/vibegit
 VibeGit Commit Workflow Starting...
