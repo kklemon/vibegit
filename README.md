@@ -15,16 +15,17 @@
 
 ---
 
-<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0;">
-  <div style="text-align: center;">
-    <img src="resources/before-vibegit.png" style="max-width: 45%; height: auto; max-height: 300px;">
-    <p>^ You before discovering VibeGit</p>
-  </div>
-  <div style="text-align: center;">
-    <img src="resources/after-vibegit.png" style="max-width: 45%; height: auto; max-height: 300px;">
-    <p>^ You after discovering VibeGit</p>
-  </div>
-</div>
+### You before discovering VibeGit 👇
+
+<p align="center">
+<img alt="You before discovering VibeGit" src="resources/before-vibegit.png">
+</p>
+
+### You after discovering VibeGit 👇
+
+<p align="center">
+<img alt="You after discovering VibeGit" src="resources/after-vibegit.png">
+</p>
 
 ---
 
