@@ -289,6 +289,17 @@ class GitContextFormatter:
         message = "\n".join("   " * bool(i) + line for i, line in enumerate(lines))
         return f'"{message}"'
 
+    def _add_file_changes(
+        self,
+        output_parts: list[str],
+        formatted_changed_files: list[str],
+        formatted_untracked_files: list[str],
+    ) -> None:
+        output_parts.append("Changed Files:")
+        output_parts.append("\n\n".join(formatted_changed_files))
+        output_parts.append("Untracked Files:")
+        output_parts.append("\n\n".join(formatted_untracked_files))
+
     def format_changes(self, ctx: CommitProposalContext) -> str:
         output_parts = []
 
@@ -299,14 +310,10 @@ class GitContextFormatter:
             self._format_file(file, ctx) for file in ctx.git_status.untracked_files
         ]
 
-        def add_file_changes():
-            output_parts.append("Changed Files:")
-            output_parts.append("\n\n".join(formatted_changed_files))
-            output_parts.append("Untracked Files:")
-            output_parts.append("\n\n".join(formatted_untracked_files))
-
         if not self.changes_last:
-            add_file_changes()
+            self._add_file_changes(
+                output_parts, formatted_changed_files, formatted_untracked_files
+            )
 
         if self.include_active_branch:
             output_parts.append(
@@ -326,6 +333,8 @@ class GitContextFormatter:
             output_parts.append(f"User Instructions: {self.user_instructions}")
 
         if self.changes_last:
-            add_file_changes()
+            self._add_file_changes(
+                output_parts, formatted_changed_files, formatted_untracked_files
+            )
 
         return "\n\n".join(output_parts)
