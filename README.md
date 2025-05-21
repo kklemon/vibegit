@@ -15,15 +15,16 @@
 
 ---
 
-<p float="right" align="center">
-    <img src="resources/before-vibegit.png" width="45%">
-    <img src="resources/after-vibegit.png" width="45%">
-</p>
-
-<p align="center">
-^ You before discovering VibeGit
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;^ You after discovering VibeGit
-</p>
+<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0;">
+  <div style="text-align: center;">
+    <img src="resources/before-vibegit.png" style="max-width: 100%; height: auto; max-height: 300px;">
+    <p>^ You before discovering VibeGit</p>
+  </div>
+  <div style="text-align: center;">
+    <img src="resources/after-vibegit.png" style="max-width: 100%; height: auto; max-height: 300px;">
+    <p>^ You after discovering VibeGit</p>
+  </div>
+</div>
 
 ---
 
@@ -50,6 +51,36 @@ In your messy Git repository, just hit
 
 ```bash
 vibegit commit
+```
+<!-- TODO: add colors to console output -->
+```
+Found Git repository at: [redacted]/vibegit
+VibeGit Commit Workflow Starting...
+Repository has no staged changes. Good to go!
+Found 5 changed and 0 untracked files.
+Formatting changes for AI analysis...
+Identified 11 change(s).
+Generating commit proposals...
+Generated 6 commit proposal(s).
+AI proposals validated successfully.
+                                                                                 Commit Proposals Summary                                                                                 
+┏━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ No. ┃ Proposed Message                           ┃ Files                       ┃ Explanation                                                                                           ┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1   │ improve readme image display and add todo  │ M README.md (+14, -9)       │ Group README changes related to image display formatting and adding a placeholder for future content. │
+│ 2   │ add debug flag and context printing to cli │ M vibegit/cli.py (+14, -8)  │ Group changes that introduce a debug flag to the CLI and use it for printing formatted context.       │
+│ 3   │ refactor cli commit workflow method        │ M vibegit/cli.py (+6, -1)   │ Refactor the main commit workflow method in the CLI for better structure.                             │
+│ 4   │ refactor git formatter file listing        │ M vibegit/git.py (+17, -8)  │ Extract a helper method for formatting file lists in the git formatter.                               │
+│ 5   │ simplify conditional in ai module          │ M vibegit/ai.py (+1, -2)    │ Minor cleanup in the AI module, simplifying an if/else block.                                         │
+│ 6   │ add type hints to compare_versions util    │ M vibegit/utils.py (+2, -2) │ Add type hints to the compare_versions function in the utils module.                                  │
+└─────┴────────────────────────────────────────────┴─────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────┘
+[?] How do you want to proceed?: 
+   Apply all proposed commits automatically (#yolo)
+ > Interactive: Review and commit each proposal one by one (opens editor)
+   Show a detailed summary of all commit proposals
+   Rerun VibeGit
+   Quit: Exit without applying any proposals
+
 ```
 
 ✨ **And it *automagically* groups related changes (hunks) together based on their *semantic meaning*!** ✨
