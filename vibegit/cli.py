@@ -172,9 +172,10 @@ def get_user_instructions(repo: git.Repo) -> str | None:
 
 
 class InteractiveCLI:
-    def __init__(self, config: Config, repo: git.Repo):
+    def __init__(self, config: Config, repo: git.Repo, debug: bool = False):
         self.config = config
         self.repo = repo
+        self.debug = debug
         self.result: CommitProposalsResultSchema | None = None
         self.ctx: CommitProposalContext | None = None
 
@@ -241,7 +242,11 @@ class InteractiveCLI:
         console.print("Formatting changes for AI analysis...")
         try:
             formatted_context = formatter.format_changes(ctx)
-            # print(formatted_context) # Debugging: Uncomment to see what's sent to the LLM
+            if self.debug:
+                console.print("\n[bold yellow]DEBUG: Formatted context being sent to the LLM:[/bold yellow]")
+                console.print("-" * 80)
+                console.print(formatted_context)
+                console.print("-" * 80)
         except Exception as e:
             console.print(f"[bold red]Error formatting changes for AI: {e}[/bold red]")
             sys.exit(1)
@@ -748,9 +753,14 @@ class InteractiveCLI:
         elif mode == "interactive":
             self.run_interactive_commit_workflow()
 
-    def run_commit_workflow(self):
+    def run_interactive_commit_workflow(self):
+        # ... rest of the method remains the same ...
+
+    def run_commit_workflow(self, debug: bool = False):
         """Handles the main logic for the 'commit' subcommand."""
         console.print("[bold blue]VibeGit Commit Workflow Starting...[/bold blue]")
+        if debug:
+            console.print("[yellow]Debug mode enabled[/yellow]")
 
         # 1. Check for staged changes
         self.prepare_repo()
@@ -784,16 +794,17 @@ def get_repo() -> git.Repo:
 
 
 def run_commit(debug: bool = False):
-    # For now, only the 'commit' subcommand is implemented directly.
-    # Later, this could use argparse or Typer/Click to handle subcommands.
-    # Example: if args.subcommand == 'commit': await run_commit_workflow()
-
+    """Run the commit workflow with optional debug output.
+    
+    Args:
+        debug: If True, enables additional debug output
+    """
     # Find Git repository
     repo = get_repo()
 
     try:
-        cli = InteractiveCLI(config, repo)
-        cli.run_commit_workflow()
+        cli = InteractiveCLI(config, repo, debug=debug)
+        cli.run_commit_workflow(debug=debug)
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         sys.exit(1)
