@@ -36,5 +36,4 @@ class CommitProposalAI:
 
         if self.allow_excluding_changes:
             return cast(IncompleteCommitProposalsResultSchema, result)
-        else:
-            return cast(CommitProposalsResultSchema, result)
+        return cast(CommitProposalsResultSchema, result)
