@@ -796,6 +796,9 @@ def run_commit(debug: bool = False):
     Args:
         debug: If True, enables additional debug output
     """
+    # For now, only the 'commit' subcommand is implemented directly.
+    # Later, this could use argparse or Typer/Click to handle subcommands.
+    # Example: if args.subcommand == 'commit': await run_commit_workflow()
     # Find Git repository
     repo = get_repo()
 
