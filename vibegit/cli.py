@@ -847,6 +847,22 @@ def run_commit(debug: bool = False, instruction: str | None = None):
 @click.group(invoke_without_command=True)
 @click.pass_context
 def cli(ctx):
+    """VibeGit - AI-powered Git commit assistant.
+
+    VibeGit analyzes your uncommitted changes and intelligently groups them into
+    semantic commits with AI-generated commit messages.
+
+    Usage:
+        vibegit [COMMAND] [OPTIONS]
+
+    When run without a command, VibeGit will execute the commit workflow.
+    It's recommended to explicitly use 'vibegit commit' instead.
+
+    Examples:
+        vibegit commit              # Analyze changes and create commits
+        vibegit config              # View current configuration
+        vibegit config wizard       # Run configuration wizard
+    """
     if not ctx.invoked_subcommand:
         console.print(
             "[bold yellow]WARNING: If no command is provided, VibeGit will run the commit workflow. "
@@ -859,18 +875,68 @@ def cli(ctx):
 @click.option("--debug", "-d", is_flag=True, help="Enable debug mode")
 @click.option("--instruction", "-i", type=str, help="Custom instructions for commit generation (overrides .vibegitrules)")
 def commit(debug: bool, instruction: str | None):
+    """Analyze repository changes and create semantic commits.
+
+    This command analyzes all uncommitted changes in your repository and:
+    1. Groups related changes based on their semantic meaning
+    2. Generates appropriate commit messages for each group
+    3. Allows you to review and apply commits interactively or automatically
+
+    The workflow supports three modes:
+    - Interactive: Review and commit each proposal one by one (default)
+    - YOLO: Automatically apply all proposed commits
+    - Summary: View detailed breakdown of all proposals
+
+    Options:
+        --debug, -d         Enable debug mode with detailed error traces
+        --instruction, -i   Custom instructions for commit generation
+                           (overrides .vibegitrules file)
+
+    Examples:
+        vibegit commit
+        vibegit commit --debug
+        vibegit commit -i "Use conventional commit format"
+
+    Note: VibeGit works best with unstaged changes. If you have staged
+    changes, you'll be prompted to unstage them first.
+    """
     run_commit(debug, instruction)
 
 
 @cli.group(name="config", invoke_without_command=True)
 @click.pass_context
 def config_cli(ctx):
+    """Manage VibeGit configuration.
+
+    When run without a subcommand, displays the current configuration.
+
+    Available subcommands:
+        wizard  - Run interactive configuration wizard
+        open    - Open config file in default editor
+        path    - Show configuration file path
+        get     - Get a specific configuration value
+        set     - Set a configuration value
+
+    Examples:
+        vibegit config              # Show current configuration
+        vibegit config wizard       # Run configuration wizard
+        vibegit config get model.name
+        vibegit config set model.name openai:gpt-4o
+    """
     if not ctx.invoked_subcommand:
         pprint(config)
 
 
 @config_cli.command()
 def open():
+    """Open the configuration file in your default editor.
+
+    This command opens the VibeGit configuration file using your
+    system's default application for .yaml files.
+
+    Example:
+        vibegit config open
+    """
     import subprocess
 
     subprocess.run(["open", CONFIG_PATH])
@@ -879,6 +945,18 @@ def open():
 @config_cli.command()
 @click.argument("path", type=str)
 def get(path: str):
+    """Get a specific configuration value by path.
+
+    PATH should be in dot notation (e.g., 'model.name').
+
+    Arguments:
+        PATH    Configuration path in dot notation
+
+    Examples:
+        vibegit config get model.name
+        vibegit config get allow_excluding_changes
+        vibegit config get watermark
+    """
     pprint(config.get_by_path(path))
 
 
@@ -886,12 +964,36 @@ def get(path: str):
 @click.argument("path", type=str)
 @click.argument("value", type=str)
 def set(path: str, value: str):
+    """Set a configuration value.
+
+    PATH should be in dot notation (e.g., 'model.name').
+    VALUE will be automatically converted to the appropriate type.
+
+    Arguments:
+        PATH    Configuration path in dot notation
+        VALUE   New value to set
+
+    Examples:
+        vibegit config set model.name openai:gpt-4o
+        vibegit config set allow_excluding_changes true
+        vibegit config set watermark false
+
+    Note: The configuration is immediately saved after setting the value.
+    """
     config.set_by_path(path, value)
     config.save_config()
 
 
 @config_cli.command()
 def path():
+    """Display the path to the configuration file.
+
+    This shows the full filesystem path where VibeGit stores its
+    configuration. Useful for manual editing or backup.
+
+    Example:
+        vibegit config path
+    """
     print(CONFIG_PATH)
 
 
@@ -899,9 +1001,19 @@ def path():
 def wizard():
     """Run the configuration wizard to set up VibeGit interactively.
 
-    This command will launch the interactive configuration wizard
-    regardless of whether a config file already exists.
-    Use this to reconfigure VibeGit or change your model settings.
+    This command launches an interactive configuration wizard that helps you:
+    - Choose an LLM model (Gemini, GPT, or custom)
+    - Configure API keys for your chosen model
+    - Save settings to the configuration file
+
+    The wizard can be run at any time, regardless of whether a config
+    file already exists. Use this to reconfigure VibeGit or change
+    your model settings.
+
+    Example:
+        vibegit config wizard
+
+    Note: The wizard will guide you through each step interactively.
     """
     from vibegit.wizard import ConfigWizard
 
