@@ -172,11 +172,12 @@ def get_project_instructions(repo: git.Repo) -> str | None:
 
 
 class InteractiveCLI:
-    def __init__(self, config: Config, repo: git.Repo):
+    def __init__(self, config: Config, repo: git.Repo, custom_instruction: str | None = None):
         self.config = config
         self.repo = repo
         self.result: CommitProposalsResultSchema | None = None
         self.ctx: CommitProposalContext | None = None
+        self.custom_instruction = custom_instruction
 
     def prepare_repo(self):
         if has_staged_changes(self.repo):
@@ -232,7 +233,8 @@ class InteractiveCLI:
         self, status: GitStatusSummary
     ) -> tuple[CommitProposalContext, CommitProposalsResultSchema | None]:
         formatter = self.config.context_formatting.get_context_formatter(
-            user_instructions=get_user_instructions(self.repo)
+            project_instructions=get_project_instructions(self.repo),
+            custom_instructions=self.custom_instruction,
         )
         ctx = CommitProposalContext(
             git_status=status, watermark_commits=self.config.watermark
@@ -783,7 +785,7 @@ def get_repo() -> git.Repo:
         sys.exit(1)
 
 
-def run_commit(debug: bool = False):
+def run_commit(debug: bool = False, instruction: str | None = None):
     # For now, only the 'commit' subcommand is implemented directly.
     # Later, this could use argparse or Typer/Click to handle subcommands.
     # Example: if args.subcommand == 'commit': await run_commit_workflow()
@@ -792,7 +794,7 @@ def run_commit(debug: bool = False):
     repo = get_repo()
 
     try:
-        cli = InteractiveCLI(config, repo)
+        cli = InteractiveCLI(config, repo, custom_instruction=instruction)
         cli.run_commit_workflow()
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
@@ -822,8 +824,9 @@ def cli(ctx):
 
 @cli.command()
 @click.option("--debug", "-d", is_flag=True, help="Enable debug mode")
-def commit(debug: bool):
-    run_commit(debug)
+@click.option("--instruction", "-i", type=str, help="Custom instructions for commit generation (overrides .vibegitrules)")
+def commit(debug: bool, instruction: str | None):
+    run_commit(debug, instruction)
 
 
 @cli.group(name="config", invoke_without_command=True)

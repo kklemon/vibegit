@@ -217,14 +217,16 @@ class GitContextFormatter:
         include_active_branch: bool = True,
         truncate_lines: int | None = None,
         include_latest_commits: int | None = 5,
-        changes_last: bool = False,
-        user_instructions: str | None = None,
+        changes_last: bool = True,
+        project_instructions: str | None = None,
+        custom_instructions: str | None = None,
     ):
         self.include_active_branch = include_active_branch
         self.include_latest_commits = include_latest_commits
         self.truncate_lines = truncate_lines
         self.changes_last = changes_last
-        self.user_instructions = user_instructions
+        self.project_instructions = project_instructions
+        self.custom_instructions = custom_instructions
 
     def _truncate_line(self, line: str) -> str:
         truncated_line = line[: self.truncate_lines]
@@ -322,8 +324,11 @@ class GitContextFormatter:
                 )
             output_parts.append("\n".join(parts))
 
-        if self.user_instructions:
-            output_parts.append(f"User Instructions: {self.user_instructions}")
+        if self.project_instructions:
+            output_parts.append(f"Project Instructions: \"{self.project_instructions}\"")
+
+        if self.custom_instructions:
+            output_parts.append(f"User Instructions (priority): \"{self.custom_instructions}\"")
 
         if self.changes_last:
             add_file_changes()

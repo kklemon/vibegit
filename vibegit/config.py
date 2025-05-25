@@ -163,13 +163,16 @@ class ContextFormattingConfig(BaseSettings):
     include_latest_commits: int | None = 5
 
     def get_context_formatter(
-        self, user_instructions: str | None = None
+        self,
+        project_instructions: str | None = None,
+        custom_instructions: str | None = None,
     ) -> GitContextFormatter:
         return GitContextFormatter(
             include_active_branch=self.include_active_branch,
             truncate_lines=self.truncate_lines,
             include_latest_commits=self.include_latest_commits,
-            user_instructions=user_instructions,
+            project_instructions=project_instructions,
+            custom_instructions=custom_instructions,
         )
 
 
