@@ -123,7 +123,7 @@ class CommitProposalContext:
             for change_id in proposal.change_ids:
                 if change_id in change_ids:
                     raise ValueError(
-                        f"Change ID {change_id} is included in multiple commit proposals"
+                        f"Change ID {change_id} is included in multiple commit proposals (bro fucked up)"
                     )
                 change_ids.add(change_id)
 
