@@ -12,4 +12,7 @@ jobs:
       - name: Run Ruff
         run: ruff check --output-format=github .
       - name: Run Tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: uv run pytest
