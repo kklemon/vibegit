@@ -164,7 +164,7 @@ def open_editor_for_commit(repo: git.Repo, proposed_message: str) -> bool:
         return False
 
 
-def get_user_instructions(repo: git.Repo) -> str | None:
+def get_project_instructions(repo: git.Repo) -> str | None:
     path = Path(repo.working_dir) / ".vibegitrules"
     if path.exists():
         return path.read_text()
