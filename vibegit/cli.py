@@ -716,20 +716,30 @@ class InteractiveCLI:
             )
 
     def prompt_main_workflow(self):
+        choices = [
+            ("Apply all proposed commits automatically (#yolo)", "yolo"),
+            (
+                "Interactive: Review and commit each proposal one by one (opens editor)",
+                "interactive",
+            ),
+            ("Show a detailed summary of all commit proposals", "summary"),
+        ]
+
+        if self.custom_instruction:
+            choices.append(("Change custom instruction", "custom_instruction"))
+        else:
+            choices.append(("Use custom instruction", "custom_instruction"))
+
+        choices.extend([
+            ("Rerun VibeGit (with current settings/instructions)", "rerun"),
+            ("Quit: Exit without applying any proposals", "quit"),
+        ])
+
         questions = [
             inquirer.List(
                 "mode",
                 message="How do you want to proceed?",
-                choices=[
-                    ("Apply all proposed commits automatically (#yolo)", "yolo"),
-                    (
-                        "Interactive: Review and commit each proposal one by one (opens editor)",
-                        "interactive",
-                    ),
-                    ("Show a detailed summary of all commit proposals", "summary"),
-                    ("Rerun VibeGit", "rerun"),
-                    ("Quit: Exit without applying any proposals", "quit"),
-                ],
+                choices=choices,
                 default="interactive",
             ),
         ]
@@ -740,11 +750,34 @@ class InteractiveCLI:
             console.print("[yellow]Exiting as requested.[/yellow]")
             sys.exit(0)
         if mode == "rerun":
-            console.print("[yellow]Rerunning VibeGit...[/yellow]")
-            self.run_commit_workflow()
-            sys.exit(0)
+            console.print("[yellow]Rerunning VibeGit with current settings...[/yellow]")
+            self.run_commit_workflow() # This will start a new flow
+            return # Exit current flow
+        if mode == "custom_instruction":
+            new_instruction_prompt = [
+                inquirer.Text(
+                    "new_instruction",
+                    message="Enter new custom instruction (leave blank to clear)",
+                    default=self.custom_instruction or ""
+                )
+            ]
+            new_instruction_answer = inquirer.prompt(new_instruction_prompt)
+            if new_instruction_answer:
+                self.custom_instruction = new_instruction_answer["new_instruction"].strip() or None
+                if self.custom_instruction:
+                    console.print(f"[green]Custom instruction set to: '{self.custom_instruction}'[/green]")
+                else:
+                    console.print("[yellow]Custom instruction cleared.[/yellow]")
+                console.print("[yellow]Rerunning VibeGit with new instruction...[/yellow]")
+                self.run_commit_workflow() # This will start a new flow
+                return # Exit current flow
+            else: # User cancelled prompt
+                self.prompt_main_workflow() # Go back to main prompt
+                return
         if mode == "summary":
             self.display_detailed_commit_proposals_summary()
+            self.prompt_main_workflow() # After summary, show prompt again
+            return
         if mode == "yolo":
             self.apply_all_commit_proposals()
         elif mode == "interactive":
