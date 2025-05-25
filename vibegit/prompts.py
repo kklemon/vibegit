@@ -69,7 +69,13 @@ Your task is to process the `git diff` and propose a structured grouping of hunk
     *   **Respect temporal order:** Estimate the temporal order of the changes and group them accordingly. Take dependencies between changes into account, i.e. if a set of changes depends on another but not vice versa, the dependent changes should come later.
 5.  **Ensure Completeness:** Every single `Change ID` present in the input `git diff` must be assigned to exactly one proposed commit. Do not leave any changes out or assign a change to multiple commits.
 
-Additionally, you may be provided with user instructions to follow with regard to commit style and granularity. Pay attention to these instructions if present and adapt your output accordingly.
+Additionally, you may be provided with two types of instructions to follow with regard to commit style and granularity:
+
+1.  **Project Instructions:** These are instructions that are specific to the project.
+2.  **User Instructions:** These are instructions that have been provided by the user specifically for this request. They should be followed with priority and override the project and all other instructions.
+
+Pay attention to these instructions if present and adapt your output accordingly.
+
 **Output Format:**
 
 Your final output **must** be a JSON object strictly conforming to the following structure (do not include the schema definition itself in the output, only the JSON data):
