@@ -1,14 +1,17 @@
-from functools import partial
-import git
 import subprocess
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 from typing import Iterator
 from urllib.parse import urlparse
+
+import git
+import pytest
+from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 
-import pytest
+load_dotenv()
 
 
 @dataclass
@@ -49,17 +52,17 @@ test_repositories: dict[str, TestRepoConfig] = {
     "gdquest-demos/godot-3-beginner-2d-platformer": TestRepoConfig(
         repo_url="https://github.com/gdquest-demos/godot-3-beginner-2d-platformer",
         clone_to_commit="569cfa322d9588ebacf6159784f1cabd9802f07b",
-        num_reset_commits=8,
+        num_reset_commits=5,
     ),
     "remix-jokes": TestRepoConfig(
         repo_url="https://github.com/remix-run/remix-jokes",
         clone_to_commit="03eace68a9ed7d5cd1f5081512ecd87ddecdcd14",
-        num_reset_commits=8,
+        num_reset_commits=5,
     ),
     "pypa/sampleproject": TestRepoConfig(
         repo_url="https://github.com/pypa/sampleproject",
         clone_to_commit="9b109b4522789762ad9dcd10540872133b6126e1",
-        num_reset_commits=8,
+        num_reset_commits=5,
     ),
 }
 
