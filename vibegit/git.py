@@ -287,6 +287,7 @@ class GitContextFormatter:
         return list(islice(repo.iter_commits(), self.include_latest_commits))
 
     def _format_commit_message(self, message: str):
+        message = message.replace(WATERMARK_COMMIT_MESSAGE, "").strip()
         lines = message.splitlines()
         message = "\n".join("   " * bool(i) + line for i, line in enumerate(lines))
         return f'"{message}"'
