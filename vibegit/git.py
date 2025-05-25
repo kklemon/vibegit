@@ -105,7 +105,7 @@ class FileChangeReference:
 class CommitProposalContext:
     git_status: GitStatusSummary
     watermark_commits: bool = True
-    change_counter: int = 0
+    change_counter: int = 1
     change_id_to_ref: dict[int, FileChangeReference] = field(default_factory=dict)
 
     def validate_commit_proposal(self, commit_proposals: CommitProposalsResultSchema):
@@ -326,10 +326,12 @@ class GitContextFormatter:
             output_parts.append("\n".join(parts))
 
         if self.project_instructions:
-            output_parts.append(f"Project Instructions: \"{self.project_instructions}\"")
+            output_parts.append(f'Project Instructions: "{self.project_instructions}"')
 
         if self.custom_instructions:
-            output_parts.append(f"User Instructions (priority): \"{self.custom_instructions}\"")
+            output_parts.append(
+                f'User Instructions (priority): "{self.custom_instructions}"'
+            )
 
         if self.changes_last:
             add_file_changes()
