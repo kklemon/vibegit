@@ -13,6 +13,10 @@ jobs:
         run: uv run ruff check --output-format=github .
       - name: Install VibeGit
         run: uv pip install .
+      - name: Set up Git
+        run: |
+          git config --global user.name "VibeGit"
+          git config --global user.email "vibegit@vibegit.com"
       - name: Run Tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
