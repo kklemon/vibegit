@@ -11,6 +11,8 @@ jobs:
         run: uv sync --locked --all-extras --dev
       - name: Run Ruff
         run: uv run ruff check --output-format=github .
+      - name: Install VibeGit
+        run: uv pip install .
       - name: Run Tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
