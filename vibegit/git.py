@@ -196,7 +196,7 @@ class CommitProposalContext:
 
                 try:
                     self.git_status.repo.git.execute(
-                        ["git", "apply", "--cached", "--whitespace=fix", f.name]
+                        ["git", "apply", "--cached", f.name]
                     )
                 except Exception as e:
                     print(f"Error staging file {file_diff.patched_file.path}: {e}")
