@@ -170,6 +170,17 @@ You may provide a `.vibegitrules` file in the root of your repository with custo
 
 See [VibeGit's `.vibegitrules` file](https://github.com/kklemon/vibegit/blob/master/.vibegitrules) for an example.
 
+### Custom Instructions on the Fly
+
+Use the `--instruction` flag with `vibegit commit` to provide one-off custom instructions without modifying `.vibegitrules`:
+
+```bash
+vibegit commit -i "group all test files together"
+vibegit commit -i "do not include changes related to the cli"
+```
+
+This is handy for temporary requirements or experimenting with different commit styles.
+
 ## The Future: More Vibes, More Git? 🚀
 
 Right now, VibeGit focuses on `commit`. But the vision is grand! Imagine AI assistance for:
