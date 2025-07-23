@@ -18,13 +18,13 @@ class ConfigWizard:
 
     # Model presets with friendly names and their LangChain init_chat_model format
     MODEL_PRESETS = {
-        "Gemini 2.5 Flash (Recommended)": "google_genai:gemini-2.5-flash-preview-04-17",
-        "Gemini 2.5 Pro": "google_genai:gemini-2.5-pro-preview-03-25",
+        "Gemini 2.5 Flash (Recommended)": "google_genai:gemini-2.5-flash",
+        "Gemini 2.5 Pro": "google_genai:gemini-2.5-pro",
         "GPT-4o": "openai:gpt-4o",
         "GPT-4.1": "openai:gpt-4.1",
         "o4-mini": "openai:o4-mini",
         "o3-mini": "openai:o3-mini",
-        "Custom model": "custom",
+        "Custom model (LangChain format)": "custom",
     }
 
     # Map model name prefixes to their API key environment variables

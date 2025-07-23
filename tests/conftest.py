@@ -68,8 +68,8 @@ test_repositories: dict[str, TestRepoConfig] = {
 
 
 test_models = [
-    "google_genai:gemini-2.5-flash-preview-04-17",
-    "google_genai:gemini-2.5-pro-preview-03-25",
+    "google_genai:gemini-2.5-flash",
+    "google_genai:gemini-2.5-pro",
     "openai:gpt-4o",
     "openai:gpt-4.1",
     "openai:o4-mini",

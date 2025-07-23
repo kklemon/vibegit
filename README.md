@@ -130,8 +130,8 @@ Gemini 2.5 Flash is used by default, as it provides arguably the best trade-off 
 
 VibeGit has been tested with:
 
-* Gemini 2.5 Flash (`google_genai:gemini-2.5-flash-preview-04-17`)
-* Gemini 2.5 Pro (`google_genai:gemini-2.5-pro-preview-03-25`)
+* Gemini 2.5 Flash (`google_genai:gemini-2.5-flash`)
+* Gemini 2.5 Pro (`google_genai:gemini-2.5-pro`)
 * GPT 4o (`openai:gpt-4o`)
 * GPT 4.1 (`openai:gpt-4.1`)
 * o4-mini (`openai:o4-mini`)

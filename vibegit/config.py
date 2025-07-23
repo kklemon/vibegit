@@ -177,7 +177,7 @@ class ContextFormattingConfig(BaseSettings):
 
 
 class ModelConfig(BaseSettings):
-    name: str = "google_genai:gemini-2.5-flash-preview-04-17"
+    name: str = "google_genai:gemini-2.5-flash"
     temperature: float | None = None  # Use the default temperature
 
     def get_chat_model(self) -> BaseChatModel:
