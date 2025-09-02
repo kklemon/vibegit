@@ -145,6 +145,12 @@ To configure a model, use the following command:
 vibegit config set model.name <model-name>
 ```
 
+You may have to provide a provider-specific API key which can be done by setting the API key under the `api_keys` config field. For instance, to supply an API for xAI models, run the following command:
+
+```bash
+vibegit config set api_keys.XAI_API_KEY <your-api-key>
+```
+
 > [!NOTE]
 > Models can't be configured on repository level at the moment.
 
