@@ -69,7 +69,7 @@ class ConfigWizard:
         answers = inquirer.prompt(questions)
         model_choice = answers.get("model_choice")
 
-        if model_choice == "Custom model":
+        if model_choice == "Custom model (LangChain format)":
             custom_model = self._get_custom_model()
             self.config.model = ModelConfig(name=custom_model)
         else:
@@ -82,7 +82,7 @@ class ConfigWizard:
         questions = [
             inquirer.Text(
                 "custom_model",
-                message="Enter the model name in LangChain's init_chat_model format:",
+                message="Enter the model name in LangChain's init_chat_model format",
                 validate=lambda _, x: len(x) > 0,
             ),
         ]
@@ -144,7 +144,7 @@ class ConfigWizard:
         questions = [
             inquirer.Password(
                 "api_key",
-                message=f"Enter your {api_key_env}:",
+                message=f"Enter your {api_key_env}",
                 validate=lambda _, x: len(x) > 0,
             ),
         ]
