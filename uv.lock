@@ -1886,6 +1886,7 @@ dependencies = [
     { name = "langchain-community" },
     { name = "langchain-google-genai" },
     { name = "langchain-openai" },
+    { name = "langchain-xai" },
     { name = "platformdirs" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
