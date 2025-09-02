@@ -189,7 +189,7 @@ This is handy for temporary requirements or experimenting with different commit 
 
 ## The Future: More Vibes, More Git? 🚀
 
-Right now, VibeGit focuses on `commit`. But the vision is grand! Imagine AI assistance for:
+At the moment VibeGit only supports the `commit` command. But the vision is grand! Imagine AI assistance for:
 
 *   `vibegit merge` (Resolving conflicts? Maybe too ambitious...)
 *   `vibegit rebase` (Interactive rebasing suggestions?)
