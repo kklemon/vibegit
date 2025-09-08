@@ -794,8 +794,8 @@ class InteractiveCLI:
 
     def prompt_main_workflow(self):
         choices = [
-            ("Apply all proposed commits automatically (#yolo)", "yolo"),
-            ("Apply all proposed commits and push (#yolo-push)", "yolo-push"),
+            ("Apply all proposed commits (#yolo)", "yolo"),
+            ("Apply all proposed commits and push", "yolo-push"),
             (
                 "Interactive: Review and commit each proposal one by one (opens editor)",
                 "interactive",
