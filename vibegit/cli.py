@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 import git
+from git.remote import PushInfo
 import inquirer
 from rich import print as pprint
 from rich.console import Console
@@ -523,6 +524,80 @@ class InteractiveCLI:
 
         self.result.commit_proposals = commit_proposals
 
+    def apply_all_commit_proposals_and_push(self):
+        """Applies all commit proposals and pushes to remote."""
+        # First apply all commits
+        self.apply_all_commit_proposals()
+
+        # Check if any commits were actually applied
+        if not self.result or not self.result.commit_proposals:
+            console.print("[green]All proposals were applied successfully.[/green]")
+        else:
+            console.print(
+                f"[yellow]Some proposals remain unapplied ({len(self.result.commit_proposals)} remaining).[/yellow]"
+            )
+            console.print(
+                "[yellow]Skipping push due to incomplete commit application.[/yellow]"
+            )
+            return
+
+        # Attempt to push
+        console.print("[cyan]Pushing commits to remote...[/cyan]")
+
+        try:
+            # Get the current branch
+            current_branch = self.repo.active_branch.name
+            console.print(f"[cyan]Pushing branch '{current_branch}'...[/cyan]")
+
+            # Push to remote
+            origin = self.repo.remote("origin")
+            push_result = origin.push(current_branch)
+
+            if push_result:
+                # Check if push was successful
+                if any(
+                    push.flags & (PushInfo.ERROR | PushInfo.REJECTED)
+                    for push in push_result
+                ):
+                    console.print(
+                        "[bold red]Push failed or was rejected by remote.[/bold red]"
+                    )
+                    for push_info in push_result:
+                        if push_info.flags & PushInfo.ERROR:
+                            console.print(f"[red]Error: {push_info.summary}[/red]")
+                        elif push_info.flags & PushInfo.REJECTED:
+                            console.print(f"[red]Rejected: {push_info.summary}[/red]")
+                else:
+                    console.print(
+                        "[green]Successfully pushed commits to remote.[/green]"
+                    )
+            else:
+                console.print(
+                    "[yellow]Push completed, but no push information was returned.[/yellow]"
+                )
+
+        except git.GitCommandError as e:
+            console.print(f"[bold red]Error during push: {e}[/bold red]")
+            console.print(
+                "[yellow]Commits were created locally but not pushed to remote.[/yellow]"
+            )
+        except ValueError as e:
+            # This can happen if there's no remote named 'origin'
+            console.print(f"[bold red]Error: {e}[/bold red]")
+            console.print(
+                "[yellow]No remote 'origin' found. Cannot push automatically.[/yellow]"
+            )
+            console.print(
+                "[yellow]You can manually push with: git push origin <branch-name>[/yellow]"
+            )
+        except Exception as e:
+            console.print(
+                f"[bold red]An unexpected error occurred during push: {e}[/bold red]"
+            )
+            console.print(
+                "[yellow]Commits were created locally but not pushed to remote.[/yellow]"
+            )
+
     def display_final_summary(self):
         final_status = get_git_status(self.repo)
         if not final_status.changed_files and not final_status.untracked_files:
@@ -718,6 +793,7 @@ class InteractiveCLI:
     def prompt_main_workflow(self):
         choices = [
             ("Apply all proposed commits automatically (#yolo)", "yolo"),
+            ("Apply all proposed commits and push (#yolo-push)", "yolo-push"),
             (
                 "Interactive: Review and commit each proposal one by one (opens editor)",
                 "interactive",
@@ -751,35 +827,43 @@ class InteractiveCLI:
             sys.exit(0)
         if mode == "rerun":
             console.print("[yellow]Rerunning VibeGit with current settings...[/yellow]")
-            self.run_commit_workflow() # This will start a new flow
-            return # Exit current flow
+            self.run_commit_workflow()  # This will start a new flow
+            return  # Exit current flow
         if mode == "custom_instruction":
             new_instruction_prompt = [
                 inquirer.Text(
                     "new_instruction",
                     message="Enter new custom instruction (leave blank to clear)",
-                    default=self.custom_instruction or ""
+                    default=self.custom_instruction or "",
                 )
             ]
             new_instruction_answer = inquirer.prompt(new_instruction_prompt)
             if new_instruction_answer:
-                self.custom_instruction = new_instruction_answer["new_instruction"].strip() or None
+                self.custom_instruction = (
+                    new_instruction_answer["new_instruction"].strip() or None
+                )
                 if self.custom_instruction:
-                    console.print(f"[green]Custom instruction set to: '{self.custom_instruction}'[/green]")
+                    console.print(
+                        f"[green]Custom instruction set to: '{self.custom_instruction}'[/green]"
+                    )
                 else:
                     console.print("[yellow]Custom instruction cleared.[/yellow]")
-                console.print("[yellow]Rerunning VibeGit with new instruction...[/yellow]")
-                self.run_commit_workflow() # This will start a new flow
-                return # Exit current flow
-            else: # User cancelled prompt
-                self.prompt_main_workflow() # Go back to main prompt
+                console.print(
+                    "[yellow]Rerunning VibeGit with new instruction...[/yellow]"
+                )
+                self.run_commit_workflow()  # This will start a new flow
+                return  # Exit current flow
+            else:  # User cancelled prompt
+                self.prompt_main_workflow()  # Go back to main prompt
                 return
         if mode == "summary":
             self.display_detailed_commit_proposals_summary()
-            self.prompt_main_workflow() # After summary, show prompt again
+            self.prompt_main_workflow()  # After summary, show prompt again
             return
         if mode == "yolo":
             self.apply_all_commit_proposals()
+        elif mode == "yolo-push":
+            self.apply_all_commit_proposals_and_push()
         elif mode == "interactive":
             self.run_interactive_commit_workflow()
 
