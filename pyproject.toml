@@ -1,6 +1,6 @@
 [project]
 name = "vibegit"
-version = "0.1.8"
+version = "0.1.9"
 description = "Automagically group and commit semantically related changes in your Git repository with AI."
 readme = "README.md"
 requires-python = ">=3.11"
