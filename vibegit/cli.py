@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 import git
+from git.remote import PushInfo
 import inquirer
 from rich import print as pprint
 from rich.console import Console
@@ -557,16 +558,16 @@ class InteractiveCLI:
             if push_result:
                 # Check if push was successful
                 if any(
-                    push.flags & (push.flags.ERROR | push.flags.REJECTED)
+                    push.flags & (PushInfo.ERROR | PushInfo.REJECTED)
                     for push in push_result
                 ):
                     console.print(
                         "[bold red]Push failed or was rejected by remote.[/bold red]"
                     )
                     for push_info in push_result:
-                        if push_info.flags & push_info.flags.ERROR:
+                        if push_info.flags & PushInfo.ERROR:
                             console.print(f"[red]Error: {push_info.summary}[/red]")
-                        elif push_info.flags & push_info.flags.REJECTED:
+                        elif push_info.flags & PushInfo.REJECTED:
                             console.print(f"[red]Rejected: {push_info.summary}[/red]")
                 else:
                     console.print(
