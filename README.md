@@ -132,6 +132,7 @@ VibeGit has been tested with:
 
 * Gemini 2.5 Flash (`google_genai:gemini-2.5-flash`)
 * Gemini 2.5 Pro (`google_genai:gemini-2.5-pro`)
+* Grok Code Fast (`xai:grok-code-fast-1`)
 * GPT 4o (`openai:gpt-4o`)
 * GPT 4.1 (`openai:gpt-4.1`)
 * o4-mini (`openai:o4-mini`)
