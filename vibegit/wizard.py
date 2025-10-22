@@ -16,6 +16,9 @@ class ConfigWizard:
     asking for essential configuration values like the LLM model and API keys.
     """
 
+    CUSTOM_LANGCHAIN_OPTION = "Custom model (LangChain format)"
+    CUSTOM_OPENAI_OPTION = "Custom model (OpenAI API compatible)"
+
     # Model presets with friendly names and their LangChain init_chat_model format
     MODEL_PRESETS = {
         "Gemini 2.5 Flash (Recommended)": "google_genai:gemini-2.5-flash",
@@ -24,7 +27,8 @@ class ConfigWizard:
         "GPT-4.1": "openai:gpt-4.1",
         "o4-mini": "openai:o4-mini",
         "o3-mini": "openai:o3-mini",
-        "Custom model (LangChain format)": "custom",
+        CUSTOM_OPENAI_OPTION: "custom_openai",
+        CUSTOM_LANGCHAIN_OPTION: "custom",
     }
 
     # Map model name prefixes to their API key environment variables
@@ -69,9 +73,17 @@ class ConfigWizard:
         answers = inquirer.prompt(questions)
         model_choice = answers.get("model_choice")
 
-        if model_choice == "Custom model (LangChain format)":
+        if model_choice == self.CUSTOM_LANGCHAIN_OPTION:
             custom_model = self._get_custom_model()
             self.config.model = ModelConfig(name=custom_model)
+        elif model_choice == self.CUSTOM_OPENAI_OPTION:
+            openai_custom = self._get_openai_compatible_model()
+            self.config.model = ModelConfig(
+                name=openai_custom["model_name"],
+                base_url=openai_custom["base_url"],
+                api_key=openai_custom["api_key"],
+                model_provider="openai",
+            )
         else:
             self.config.model = ModelConfig(name=self.MODEL_PRESETS[model_choice])
 
@@ -90,9 +102,99 @@ class ConfigWizard:
         answers = inquirer.prompt(questions)
         return answers.get("custom_model")
 
+    def _get_openai_compatible_model(self):
+        """Prompt for OpenAI-compatible connection details."""
+        existing_model = self.config.model
+        existing_is_openai = (
+            existing_model.model_provider == "openai"
+            or existing_model.base_url is not None
+            or existing_model.api_key is not None
+        )
+
+        default_base_url = (existing_model.base_url or "") if existing_is_openai else ""
+        default_model_name = existing_model.name if existing_is_openai else ""
+
+        questions = [
+            inquirer.Text(
+                "base_url",
+                message="Enter the base URL for the OpenAI-compatible API",
+                default=default_base_url,
+                validate=lambda _, x: len(x.strip() or default_base_url) > 0,
+            ),
+            inquirer.Text(
+                "model_name",
+                message="Enter the model name",
+                default=default_model_name,
+                validate=lambda _, x: len(x.strip() or default_model_name) > 0,
+            ),
+        ]
+
+        answers = inquirer.prompt(questions) or {}
+        base_url = answers.get("base_url", "").strip() or default_base_url
+        model_name = answers.get("model_name", "").strip() or default_model_name
+
+        if not base_url:
+            console.print("[red]Base URL cannot be empty. Please try again.[/red]")
+            return self._get_openai_compatible_model()
+
+        if not model_name:
+            console.print("[red]Model name cannot be empty. Please try again.[/red]")
+            return self._get_openai_compatible_model()
+
+        existing_api_key = existing_model.api_key if existing_is_openai else None
+        api_key: str | None = None
+
+        if existing_api_key:
+            confirm = inquirer.prompt(
+                [
+                    inquirer.Confirm(
+                        "keep_api_key",
+                        message="Reuse the existing API key?",
+                        default=True,
+                    )
+                ]
+            )
+            if confirm and confirm.get("keep_api_key", True):
+                api_key = existing_api_key
+            else:
+                api_key = self._prompt_for_openai_api_key()
+        else:
+            api_key = self._prompt_for_openai_api_key()
+
+        return {
+            "base_url": base_url,
+            "model_name": model_name,
+            "api_key": api_key,
+        }
+
+    def _prompt_for_openai_api_key(self) -> str:
+        while True:
+            answers = (
+                inquirer.prompt(
+                    [
+                        inquirer.Password(
+                            "api_key",
+                            message="Enter the API key",
+                            validate=lambda _, x: len(x.strip()) > 0,
+                        )
+                    ]
+                )
+                or {}
+            )
+            api_key = answers.get("api_key", "").strip()
+            if api_key:
+                return api_key
+            console.print("[red]API key cannot be empty. Please try again.[/red]")
+
     def _configure_api_keys(self):
         """Configure API keys based on the selected model."""
         console.print("\n[bold]API Key Configuration[/bold]")
+
+        if self.config.model.api_key:
+            console.print(
+                "[green]API key saved for the selected model. No additional configuration needed.[/green]"
+            )
+            return
 
         model_name = self.config.model.name
 

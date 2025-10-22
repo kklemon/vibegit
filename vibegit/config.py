@@ -179,14 +179,21 @@ class ContextFormattingConfig(BaseSettings):
 class ModelConfig(BaseSettings):
     name: str = "google_genai:gemini-2.5-flash"
     temperature: float | None = None  # Use the default temperature
+    base_url: str | None = None
+    api_key: str | None = None
+    model_provider: str | None = None
 
     def get_chat_model(self) -> BaseChatModel:
-        kwargs: dict[str, Any] = dict(
-            model=self.name,
-        )
+        kwargs: dict[str, Any] = {"model": self.name}
 
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
+        if self.base_url:
+            kwargs["base_url"] = self.base_url
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        if self.model_provider:
+            kwargs["model_provider"] = self.model_provider
 
         return cast(BaseChatModel, init_chat_model(**kwargs))
 
