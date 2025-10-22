@@ -249,7 +249,10 @@ class InteractiveCLI:
             git_status=status, watermark_commits=self.config.watermark
         )
 
-        console.print("Formatting changes for AI analysis...")
+        model_info = self.config.model.name
+        console.print(
+            f"Formatting changes for AI analysis with model [cyan]{model_info}[/cyan]..."
+        )
         try:
             formatted_context = formatter.format_changes(ctx)
             # print(formatted_context) # Debugging: Uncomment to see what's sent to the LLM
