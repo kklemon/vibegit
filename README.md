@@ -107,14 +107,21 @@ When you run VibeGit for the first time, it will launch an interactive configura
 - Configure the necessary API keys
 
 ```bash
-# The wizard runs automatically on first use, but you can manually run it anytime with:
+# The wizard runs automatically on first use and whenever you run:
+vibegit config
+
+# Legacy alias (equivalent to the command above):
 vibegit config wizard
 ```
 Google's Gemini models are used by default for which you will need a Google AI Studio API key. If you don't have a Gemini API key yet, get one [here](https://aistudio.google.com/app/apikey).
 
+Selecting **Custom model (OpenAI API compatible)** lets you point VibeGit at any endpoint that implements the OpenAI Chat Completions API. The wizard will collect the base URL, model name, and API key and store them so that future runs interact with your custom endpoint automatically.
+
+Re-running the wizard with this option will pre-fill the previously saved base URL and model name, and you can choose whether to reuse or replace the stored API key.
+
 ## Manual Configuration
 
-Use `vibegit config` to print the current configuration to the console.
+Use `vibegit config show` to print the current configuration to the console.
 
 To set single configuration values, use `vibegit config set <path> <value>` and provide the configuration path in dot notation, e.g. `model.name`.
 
@@ -144,6 +151,14 @@ To configure a model, use the following command:
 
 ```bash
 vibegit config set model.name <model-name>
+```
+
+For OpenAI-compatible endpoints you can also set values manually:
+
+```bash
+vibegit config set model.model_provider openai
+vibegit config set model.base_url https://api.example.com/v1
+vibegit config set model.api_key <your-api-key>
 ```
 
 You may have to provide a provider-specific API key which can be done by setting the API key under the `api_keys` config field. For instance, to supply an API for xAI models, run the following command:

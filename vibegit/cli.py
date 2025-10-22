@@ -102,6 +102,12 @@ def get_config() -> Config:
 config = get_config()
 
 
+def launch_config_wizard():
+    """Run the interactive configuration wizard."""
+    wizard = ConfigWizard()
+    wizard.run()
+
+
 def has_staged_changes(repo: git.Repo) -> bool:
     """Check if there are any changes staged in the Git index."""
     try:
@@ -948,8 +954,8 @@ def cli(ctx):
 
     Examples:
         vibegit commit              # Analyze changes and create commits
-        vibegit config              # View current configuration
-        vibegit config wizard       # Run configuration wizard
+        vibegit config              # Run configuration wizard
+        vibegit config show         # View current configuration
     """
     if not ctx.invoked_subcommand:
         console.print(
@@ -1001,23 +1007,34 @@ def commit(debug: bool, instruction: str | None):
 def config_cli(ctx):
     """Manage VibeGit configuration.
 
-    When run without a subcommand, displays the current configuration.
+    When run without a subcommand, launches the interactive configuration wizard.
 
     Available subcommands:
-        wizard  - Run interactive configuration wizard
+        show    - Display the current configuration
+        wizard  - Run interactive configuration wizard (alias)
         open    - Open config file in default editor
         path    - Show configuration file path
         get     - Get a specific configuration value
         set     - Set a configuration value
 
     Examples:
-        vibegit config              # Show current configuration
-        vibegit config wizard       # Run configuration wizard
+        vibegit config              # Run configuration wizard
+        vibegit config show         # Show current configuration
         vibegit config get model.name
         vibegit config set model.name openai:gpt-4o
     """
     if not ctx.invoked_subcommand:
-        pprint(config)
+        launch_config_wizard()
+
+
+@config_cli.command()
+def show():
+    """Display the current VibeGit configuration.
+
+    Example:
+        vibegit config show
+    """
+    pprint(config)
 
 
 @config_cli.command()
@@ -1094,7 +1111,9 @@ def path():
 def wizard():
     """Run the configuration wizard to set up VibeGit interactively.
 
-    This command launches an interactive configuration wizard that helps you:
+    This command is retained for backward compatibility; running
+    'vibegit config' without a subcommand also starts the wizard.
+    The wizard helps you:
     - Choose an LLM model (Gemini, GPT, or custom)
     - Configure API keys for your chosen model
     - Save settings to the configuration file
@@ -1108,10 +1127,7 @@ def wizard():
 
     Note: The wizard will guide you through each step interactively.
     """
-    from vibegit.wizard import ConfigWizard
-
-    wizard = ConfigWizard()
-    wizard.run()
+    launch_config_wizard()
 
 
 if __name__ == "__main__":
