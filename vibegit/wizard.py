@@ -23,6 +23,7 @@ class ConfigWizard:
     MODEL_PRESETS = {
         "Gemini 2.5 Flash (Recommended)": "google_genai:gemini-2.5-flash",
         "Gemini 2.5 Pro": "google_genai:gemini-2.5-pro",
+        "Local Claude (CLI)": "local:claude",
         "GPT-4o": "openai:gpt-4o",
         "GPT-4.1": "openai:gpt-4.1",
         "o4-mini": "openai:o4-mini",

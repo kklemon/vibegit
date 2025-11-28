@@ -184,6 +184,16 @@ class ModelConfig(BaseSettings):
     model_provider: str | None = None
 
     def get_chat_model(self) -> BaseChatModel:
+        # Handle local Claude CLI model
+        if self.name.startswith("local:claude"):
+            from vibegit.local_claude_model import LocalClaudeChatModel
+
+            return LocalClaudeChatModel(
+                model_name=self.name,
+                temperature=self.temperature,
+            )
+
+        # Handle standard LangChain models
         kwargs: dict[str, Any] = {"model": self.name}
 
         if self.temperature is not None:
