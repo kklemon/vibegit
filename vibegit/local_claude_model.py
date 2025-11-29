@@ -101,6 +101,7 @@ class LocalClaudeChatModel(BaseChatModel):
     json_schema: dict[str, Any] | None = None
     schema_class: type[BaseModel] | None = None
     claude_command: str = "claude"
+    claude_model: str = "sonnet"  # Claude model to use: sonnet, opus, haiku
 
     @property
     def _llm_type(self) -> str:
@@ -162,7 +163,7 @@ class LocalClaudeChatModel(BaseChatModel):
         cmd = [self.claude_command]
 
         # Add output format flags
-        cmd.extend(["--output-format", "json", "--model", "haiku", '--tools', '""'])
+        cmd.extend(["--output-format", "json", "--model", self.claude_model, '--tools', '""'])
 
         # Add JSON schema if structured output is configured
         if self.json_schema:
@@ -174,8 +175,6 @@ class LocalClaudeChatModel(BaseChatModel):
 
         # Add print flag to get direct output
         cmd.append("--print")
-
-        print(cmd)
 
         # Execute Claude CLI
         try:

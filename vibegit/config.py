@@ -188,9 +188,15 @@ class ModelConfig(BaseSettings):
         if self.name.startswith("local:claude"):
             from vibegit.local_claude_model import LocalClaudeChatModel
 
+            # Parse model from format: local:claude:MODEL (e.g., local:claude:opus)
+            # Default to "sonnet" if not specified
+            parts = self.name.split(":")
+            claude_model = parts[2] if len(parts) > 2 else "sonnet"
+
             return LocalClaudeChatModel(
                 model_name=self.name,
                 temperature=self.temperature,
+                claude_model=claude_model,
             )
 
         # Handle standard LangChain models
