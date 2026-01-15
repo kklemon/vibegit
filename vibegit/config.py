@@ -1,12 +1,10 @@
 import collections
 import os
 from pathlib import Path
-from typing import Any, cast, get_args, get_origin
+from typing import Any, get_args, get_origin
 
 import platformdirs
 import toml
-from langchain.chat_models import init_chat_model
-from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import Field, TypeAdapter, ValidationError, model_validator
 from pydantic_settings import BaseSettings as _BaseSettings
 from pydantic_settings import (
@@ -16,6 +14,7 @@ from pydantic_settings import (
 )
 
 from vibegit.git import GitContextFormatter
+from vibegit.llm import resolve_model
 
 CONFIG_PATH = Path(platformdirs.user_config_dir("vibegit")) / "config.toml"
 
@@ -177,25 +176,14 @@ class ContextFormattingConfig(BaseSettings):
 
 
 class ModelConfig(BaseSettings):
-    name: str = "google_genai:gemini-2.5-flash"
+    name: str = "google-gla:gemini-2.5-flash"
     temperature: float | None = None  # Use the default temperature
     base_url: str | None = None
     api_key: str | None = None
     model_provider: str | None = None
 
-    def get_chat_model(self) -> BaseChatModel:
-        kwargs: dict[str, Any] = {"model": self.name}
-
-        if self.temperature is not None:
-            kwargs["temperature"] = self.temperature
-        if self.base_url:
-            kwargs["base_url"] = self.base_url
-        if self.api_key:
-            kwargs["api_key"] = self.api_key
-        if self.model_provider:
-            kwargs["model_provider"] = self.model_provider
-
-        return cast(BaseChatModel, init_chat_model(**kwargs))
+    def get_model(self) -> tuple[Any, Any | None]:
+        return resolve_model(self)
 
 
 class Config(BaseSettings):
@@ -211,6 +199,8 @@ class Config(BaseSettings):
     def inject_api_keys(self):
         for key, value in self.api_keys.items():
             os.environ[key.upper()] = value
+        if "XAI_API_KEY" in os.environ and "GROK_API_KEY" not in os.environ:
+            os.environ["GROK_API_KEY"] = os.environ["XAI_API_KEY"]
         return self
 
     @classmethod
