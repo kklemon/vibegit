@@ -16,25 +16,28 @@ class ConfigWizard:
     asking for essential configuration values like the LLM model and API keys.
     """
 
-    CUSTOM_LANGCHAIN_OPTION = "Custom model (LangChain format)"
+    CUSTOM_PYDANTIC_AI_OPTION = "Custom model (<provider>:<model> format, see https://ai.pydantic.dev/api/models/base/)"
     CUSTOM_OPENAI_OPTION = "Custom model (OpenAI API compatible)"
 
-    # Model presets with friendly names and their LangChain init_chat_model format
+    # Model presets with friendly names and their Pydantic AI provider:model format
     MODEL_PRESETS = {
-        "Gemini 2.5 Flash (Recommended)": "google_genai:gemini-2.5-flash",
-        "Gemini 2.5 Pro": "google_genai:gemini-2.5-pro",
-        "GPT-4o": "openai:gpt-4o",
-        "GPT-4.1": "openai:gpt-4.1",
-        "o4-mini": "openai:o4-mini",
-        "o3-mini": "openai:o3-mini",
+        "Gemini 3 Flash (Preview, Recommended)": "google-gla:gemini-3-flash-preview",
+        "Gemini 3 Pro (Preview)": "google-gla:gemini-3-pro-preview",
+        "Gemini 2.5 Flash": "google-gla:gemini-2.5-flash",
+        "Gemini 2.5 Pro": "google-gla:gemini-2.5-pro",
+        "GPT-5": "openai:gpt-5",
+        "GPT-5.2": "openai:gpt-5.2",
         CUSTOM_OPENAI_OPTION: "custom_openai",
-        CUSTOM_LANGCHAIN_OPTION: "custom",
+        CUSTOM_PYDANTIC_AI_OPTION: "custom",
     }
 
     # Map model name prefixes to their API key environment variables
     MODEL_TO_API_KEY_ENV = {
+        "google-gla": "GOOGLE_API_KEY",
         "google_genai": "GOOGLE_API_KEY",
         "openai": "OPENAI_API_KEY",
+        "grok": "GROK_API_KEY",
+        "xai": "GROK_API_KEY",
     }
 
     def __init__(self):
@@ -73,7 +76,7 @@ class ConfigWizard:
         answers = inquirer.prompt(questions)
         model_choice = answers.get("model_choice")
 
-        if model_choice == self.CUSTOM_LANGCHAIN_OPTION:
+        if model_choice == self.CUSTOM_PYDANTIC_AI_OPTION:
             custom_model = self._get_custom_model()
             self.config.model = ModelConfig(name=custom_model)
         elif model_choice == self.CUSTOM_OPENAI_OPTION:
@@ -94,7 +97,7 @@ class ConfigWizard:
         questions = [
             inquirer.Text(
                 "custom_model",
-                message="Enter the model name in LangChain's init_chat_model format",
+                message="Enter the model name in Pydantic AI <provider>:<model> format",
                 validate=lambda _, x: len(x) > 0,
             ),
         ]
