@@ -2,13 +2,13 @@ from vibegit.config import ModelConfig
 
 
 def test_model_config_openai_compatible(monkeypatch):
-    captured_kwargs = {}
+    captured_config = {}
 
-    def fake_init_chat_model(**kwargs):
-        captured_kwargs.update(kwargs)
-        return "chat_model_instance"
+    def fake_resolve_model(config):
+        captured_config["config"] = config
+        return "model_instance", "model_settings"
 
-    monkeypatch.setattr("vibegit.config.init_chat_model", fake_init_chat_model)
+    monkeypatch.setattr("vibegit.config.resolve_model", fake_resolve_model)
 
     config = ModelConfig(
         name="my-openai-model",
@@ -18,30 +18,24 @@ def test_model_config_openai_compatible(monkeypatch):
         temperature=0.25,
     )
 
-    result = config.get_chat_model()
+    result = config.get_model()
 
-    assert result == "chat_model_instance"
-    assert captured_kwargs["model"] == "my-openai-model"
-    assert captured_kwargs["model_provider"] == "openai"
-    assert captured_kwargs["base_url"] == "https://api.example.com/v1"
-    assert captured_kwargs["api_key"] == "secret-key"
-    assert captured_kwargs["temperature"] == 0.25
+    assert result == ("model_instance", "model_settings")
+    assert captured_config["config"] is config
 
 
 def test_model_config_default_provider(monkeypatch):
-    captured_kwargs = {}
+    captured_config = {}
 
-    def fake_init_chat_model(**kwargs):
-        captured_kwargs.update(kwargs)
-        return "chat_model_instance"
+    def fake_resolve_model(config):
+        captured_config["config"] = config
+        return "model_instance", None
 
-    monkeypatch.setattr("vibegit.config.init_chat_model", fake_init_chat_model)
+    monkeypatch.setattr("vibegit.config.resolve_model", fake_resolve_model)
 
     config = ModelConfig(name="google_genai:gemini-2.5-flash")
 
-    config.get_chat_model()
+    result = config.get_model()
 
-    assert captured_kwargs["model"] == "google_genai:gemini-2.5-flash"
-    assert "model_provider" not in captured_kwargs
-    assert "base_url" not in captured_kwargs
-    assert "api_key" not in captured_kwargs
+    assert result == ("model_instance", None)
+    assert captured_config["config"] is config

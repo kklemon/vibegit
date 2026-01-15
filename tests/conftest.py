@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -9,7 +10,6 @@ from urllib.parse import urlparse
 import git
 import pytest
 from dotenv import load_dotenv
-from langchain.chat_models import init_chat_model
 
 load_dotenv()
 
@@ -68,12 +68,12 @@ test_repositories: dict[str, TestRepoConfig] = {
 
 
 test_models = [
-    "google_genai:gemini-2.5-flash",
-    "google_genai:gemini-2.5-pro",
-    "openai:gpt-4o",
-    "openai:gpt-4.1",
-    "openai:o4-mini",
-    "openai:o3-mini",
+    "google-gla:gemini-3-flash-preview",
+    "google-gla:gemini-3-pro-preview",
+    "google-gla:gemini-2.5-flash",
+    "google-gla:gemini-2.5-pro",
+    "openai:gpt-5",
+    "openai:gpt-5.2",
 ]
 
 
@@ -86,4 +86,12 @@ def repo(request):
 
 @pytest.fixture
 def chat_model(request):
-    yield init_chat_model(request.param)
+    model_name = request.param
+    if model_name.startswith("openai:") and not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is not set")
+    if model_name.startswith("google-gla:") and not os.environ.get("GOOGLE_API_KEY"):
+        pytest.skip("GOOGLE_API_KEY is not set")
+    if model_name.startswith("grok:") and not os.environ.get("GROK_API_KEY"):
+        pytest.skip("GROK_API_KEY is not set")
+
+    yield model_name
