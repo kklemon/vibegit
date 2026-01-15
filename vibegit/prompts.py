@@ -3,12 +3,12 @@ COMPLETE_FORMAT_DESCRIPTION = """
 {
   "commit_proposals": [
     {
-      "reasoning": "Explanation for grouping changes X, Y, and Z.",
+      "explanation": "Explanation for grouping changes X, Y, and Z.",
       "commit_message": "Subject line summarizing changes in changes X, Y, Z\n\nOptional body providing more details.",
       "change_ids": [X, Y, Z]
     },
     {
-      "reasoning": "Explanation for grouping changes A, B, and C.",
+      "explanation": "Explanation for grouping changes A, B, and C.",
       "commit_message": "Subject line summarizing changes in changes A, B, C\n\nOptional body providing more details.",
       "change_ids": [A, B, C]
     }

@@ -1,9 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
 
 
 class CommitProposalSchema(BaseModel):
     explanation: str = Field(
-        description="An explanation for the decision of grouping these changes together."
+        validation_alias=AliasChoices("explanation", "reasoning"),
+        description="An explanation for the decision of grouping these changes together.",
     )
     commit_message: str = Field(description="The proposed commit message")
     change_ids: list[int] = Field(
