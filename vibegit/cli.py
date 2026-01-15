@@ -269,9 +269,11 @@ class InteractiveCLI:
         console.print(f"Identified {len(ctx.change_id_to_ref)} change(s).")
 
         console.print("Generating commit proposals...")
+        model, model_settings = config.model.get_model()
         ai = CommitProposalAI(
-            config.model.get_chat_model(),
+            model,
             allow_excluding_changes=config.allow_excluding_changes,
+            model_settings=model_settings,
         )
 
         try:
