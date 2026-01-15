@@ -137,15 +137,13 @@ Gemini 2.5 Flash is used by default, as it provides arguably the best trade-off 
 
 VibeGit has been tested with:
 
-* Gemini 2.5 Flash (`google_genai:gemini-2.5-flash`)
-* Gemini 2.5 Pro (`google_genai:gemini-2.5-pro`)
-* Grok Code Fast (`xai:grok-code-fast-1`)
-* GPT 4o (`openai:gpt-4o`)
-* GPT 4.1 (`openai:gpt-4.1`)
-* o4-mini (`openai:o4-mini`)
-* o3-mini (`openai:o3-mini`)
+* Gemini 3 Flash (preview) (`google-gla:gemini-3-flash-preview`)
+* Gemini 3 Pro (preview) (`google-gla:gemini-3-pro-preview`)
+* Grok Code Fast (`grok:grok-code-fast-1`)
+* GPT-5 (`openai:gpt-5`)
+* GPT-5.2 (`openai:gpt-5.2`)
 
-You can use any other model that meets the aforementioned requirements and is supported by LangChain. The model name needs to be provided in the [`init_chat_model` format](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html).
+You can use any other model that meets the aforementioned requirements and is supported by Pydantic AI. Model names should be provided in the `provider:model` format (for example, `openai:gpt-4o` or `google-gla:gemini-2.5-flash`).
 
 To configure a model, use the following command:
 
@@ -161,10 +159,10 @@ vibegit config set model.base_url https://api.example.com/v1
 vibegit config set model.api_key <your-api-key>
 ```
 
-You may have to provide a provider-specific API key which can be done by setting the API key under the `api_keys` config field. For instance, to supply an API for xAI models, run the following command:
+You may have to provide a provider-specific API key which can be done by setting the API key under the `api_keys` config field. For instance, to supply an API key for Grok models, run the following command:
 
 ```bash
-vibegit config set api_keys.XAI_API_KEY <your-api-key>
+vibegit config set api_keys.GROK_API_KEY <your-api-key>
 ```
 
 > [!NOTE]
