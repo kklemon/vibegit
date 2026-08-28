@@ -3,12 +3,13 @@ import subprocess
 import sys
 import tempfile
 from copy import deepcopy
+from importlib.resources import files
 from pathlib import Path
 
 import click
 import git
-from git.remote import PushInfo
 import inquirer
+from git.remote import PushInfo
 from rich import print as pprint
 from rich.console import Console
 from rich.table import Table
@@ -35,6 +36,7 @@ from vibegit.wizard import ConfigWizard, run_wizard_if_needed
 os.environ["GRPC_VERBOSITY"] = "NONE"
 
 console = Console()
+RULES_FILENAME = ".vibegitrules"
 
 
 def check_for_update():
@@ -164,7 +166,7 @@ def open_editor_for_commit(repo: git.Repo, proposed_message: str) -> bool:
             "[bold red]Error: 'git' command not found. Is Git installed and in your PATH?[/bold red]"
         )
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - editor failures should return to the CLI
         console.print(
             f"[bold red]An unexpected error occurred while trying to open the commit editor: {e}[/bold red]"
         )
@@ -172,10 +174,15 @@ def open_editor_for_commit(repo: git.Repo, proposed_message: str) -> bool:
 
 
 def get_project_instructions(repo: git.Repo) -> str | None:
-    path = Path(repo.working_dir) / ".vibegitrules"
+    path = Path(repo.working_dir) / RULES_FILENAME
     if path.exists():
-        return path.read_text()
+        return path.read_text(encoding="utf-8")
     return None
+
+
+def get_default_rules() -> str:
+    """Return the rules template bundled with VibeGit."""
+    return files("vibegit").joinpath("default.vibegitrules").read_text(encoding="utf-8")
 
 
 class InteractiveCLI:
@@ -959,6 +966,7 @@ def cli(ctx):
 
     Examples:
         vibegit commit              # Analyze changes and create commits
+        vibegit init                # Add a starter .vibegitrules file
         vibegit config              # Run configuration wizard
         vibegit config show         # View current configuration
     """
@@ -1005,6 +1013,32 @@ def commit(debug: bool, instruction: str | None):
     changes, you'll be prompted to unstage them first.
     """
     run_commit(debug, instruction)
+
+
+@cli.command(name="init")
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Replace an existing .vibegitrules file.",
+)
+def init_rules(force: bool):
+    """Create a starter .vibegitrules file in the current directory."""
+    target = Path.cwd() / RULES_FILENAME
+
+    if target.exists() and not force:
+        raise click.ClickException(
+            f"{RULES_FILENAME} already exists; use --force to replace it."
+        )
+
+    try:
+        target.write_text(get_default_rules(), encoding="utf-8")
+    except OSError as error:
+        raise click.ClickException(
+            f"Could not write {RULES_FILENAME}: {error}"
+        ) from error
+
+    click.echo(f"Created {target}")
 
 
 @cli.group(name="config", invoke_without_command=True)
