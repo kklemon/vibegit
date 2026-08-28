@@ -78,7 +78,7 @@ def get_config() -> Config:
     try:
         config = Config()
         return config
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - config errors are reported interactively
         console.print(f"[bold red]Error loading config: {e}[/bold red]")
 
         questions = [
@@ -99,9 +99,6 @@ def get_config() -> Config:
         else:
             console.print("[red]Exiting.[/red]")
             sys.exit(1)
-
-
-config = get_config()
 
 
 def launch_config_wizard():
@@ -195,6 +192,16 @@ class InteractiveCLI:
         self.ctx: CommitProposalContext | None = None
         self.custom_instruction = custom_instruction
 
+    def _require_context(self) -> CommitProposalContext:
+        if self.ctx is None:
+            raise RuntimeError("Commit proposal context has not been generated yet")
+        return self.ctx
+
+    def _require_result(self) -> CommitProposalsResultSchema:
+        if self.result is None:
+            raise RuntimeError("Commit proposals have not been generated yet")
+        return self.result
+
     def prepare_repo(self):
         if has_staged_changes(self.repo):
             console.print("[bold yellow]Warning:[/bold yellow] Found staged changes.")
@@ -241,7 +248,7 @@ class InteractiveCLI:
                 f"Found {len(status.changed_files)} changed and {len(status.untracked_files)} untracked files."
             )
             return status
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - command boundary reports status errors
             console.print(f"[bold red]Error getting Git status: {e}[/bold red]")
             sys.exit(1)
 
@@ -263,7 +270,7 @@ class InteractiveCLI:
         try:
             formatted_context = formatter.format_changes(ctx)
             # print(formatted_context) # Debugging: Uncomment to see what's sent to the LLM
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - formatting failures are user-facing
             console.print(f"[bold red]Error formatting changes for AI: {e}[/bold red]")
             sys.exit(1)
 
@@ -276,16 +283,16 @@ class InteractiveCLI:
         console.print(f"Identified {len(ctx.change_id_to_ref)} change(s).")
 
         console.print("Generating commit proposals...")
-        model, model_settings = config.model.get_model()
+        model, model_settings = self.config.model.get_model()
         ai = CommitProposalAI(
             model,
-            allow_excluding_changes=config.allow_excluding_changes,
+            allow_excluding_changes=self.config.allow_excluding_changes,
             model_settings=model_settings,
         )
 
         try:
             result = ai.propose_commits(formatted_context)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - provider errors are user-facing
             console.print(
                 f"[bold red]Error getting commit proposals from AI: {e}[/bold red]"
             )
@@ -346,7 +353,7 @@ class InteractiveCLI:
         )
 
     def _format_commit_proposal_changes(self, change_ids: list[int]) -> str:
-        file_diffs = self.ctx.get_file_diffs_from_change_ids(change_ids)
+        file_diffs = self._require_context().get_file_diffs_from_change_ids(change_ids)
 
         files = [self._format_file(file) for file in file_diffs]
 
@@ -407,6 +414,8 @@ class InteractiveCLI:
             console.print("[yellow]No commit proposals to display.[/yellow]")
             return
 
+        context = self._require_context()
+
         # Create content to display in less
         content = []
 
@@ -436,7 +445,7 @@ class InteractiveCLI:
             content.append("\033[1;34m" + "-" * 80 + "\033[0m")  # Blue
 
             # Get and format all file diffs for this proposal
-            file_diffs = self.ctx.get_file_diffs_from_change_ids(proposal.change_ids)
+            file_diffs = context.get_file_diffs_from_change_ids(proposal.change_ids)
 
             for file_diff in file_diffs:
                 # Get original git diff to preserve colors and formatting
@@ -467,7 +476,7 @@ class InteractiveCLI:
                 content.append("\033[1;31m" + "-" * 80 + "\033[0m")  # Red
 
                 # Get and format all file diffs for this excluded group
-                file_diffs = self.ctx.get_file_diffs_from_change_ids(group.change_ids)
+                file_diffs = context.get_file_diffs_from_change_ids(group.change_ids)
 
                 for file_diff in file_diffs:
                     content.append(file_diff.original_diff)
@@ -480,20 +489,20 @@ class InteractiveCLI:
 
         try:
             # Open less with the content
-            subprocess.run(["less", "-R", temp_path])
+            subprocess.run(["less", "-R", temp_path], check=False)
         finally:
             # Clean up temporary file
             import os
 
             os.unlink(temp_path)
 
-        self.prompt_main_workflow()
-
     def apply_all_commit_proposals(
         self,
     ):
         """Applies all commit proposals."""
-        commit_proposals = self.result.commit_proposals
+        result = self._require_result()
+        context = self._require_context()
+        commit_proposals = result.commit_proposals
         console.print(
             f"\n[bold magenta]Entering #yolo Mode: Applying all {len(commit_proposals)} proposals...[/bold magenta]"
         )
@@ -505,12 +514,12 @@ class InteractiveCLI:
             console.print(f"  Changes: {proposal.change_ids}")
             try:
                 console.print("[cyan]Staging changes...[/cyan]")
-                self.ctx.stage_commit_proposal(proposal)
+                context.stage_commit_proposal(proposal)
                 console.print("[green]Changes staged successfully.[/green]")
 
                 console.print("[cyan]Creating commit...[/cyan]")
                 # In YOLO mode, commit directly without opening editor
-                self.ctx.commit_commit_proposal(proposal)
+                context.commit_commit_proposal(proposal)
                 console.print("[green]Commit created successfully.[/green]")
                 commit_proposals.pop(0)  # Remove applied proposal from original list
 
@@ -540,9 +549,9 @@ class InteractiveCLI:
                 )
                 reset_staged_changes(self.repo)
 
-                raise e
+                raise
 
-        self.result.commit_proposals = commit_proposals
+        result.commit_proposals = commit_proposals
 
     def apply_all_commit_proposals_and_push(self):
         """Applies all commit proposals and pushes to remote."""
@@ -610,7 +619,7 @@ class InteractiveCLI:
             console.print(
                 "[yellow]You can manually push with: git push origin <branch-name>[/yellow]"
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve local commits on push failures
             console.print(
                 f"[bold red]An unexpected error occurred during push: {e}[/bold red]"
             )
@@ -643,7 +652,8 @@ class InteractiveCLI:
     def run_interactive_commit_workflow(self):
         console.print("\n[bold magenta]Entering Interactive Mode...[/bold magenta]")
 
-        result_copy = deepcopy(self.result)
+        context = self._require_context()
+        result_copy = deepcopy(self._require_result())
         total_proposals = len(result_copy.commit_proposals)
         committed_count = 0
 
@@ -677,7 +687,7 @@ class InteractiveCLI:
             if action == "commit":
                 try:
                     console.print("[cyan]Staging changes for commit...[/cyan]")
-                    self.ctx.stage_commit_proposal(proposal)
+                    context.stage_commit_proposal(proposal)
                     console.print("[green]Changes staged.[/green]")
 
                     console.print("[cyan]Opening editor for commit message...[/cyan]")
@@ -721,7 +731,7 @@ class InteractiveCLI:
                         "[yellow]Skipping this proposal due to staging error.[/yellow]"
                     )
                     # Do not remove the proposal, let user decide next iteration or quit
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - keep interactive workflow alive
                     console.print(
                         f"[bold red]An unexpected error occurred processing proposal {current_num}: {e}[/bold red]"
                     )
@@ -752,7 +762,7 @@ class InteractiveCLI:
                     console.print(f"  Changes: {p.change_ids}")
                     try:
                         console.print("[cyan]Staging changes...[/cyan]")
-                        self.ctx.stage_commit_proposal(p)
+                        context.stage_commit_proposal(p)
                         console.print("[green]Changes staged successfully.[/green]")
                         console.print("[cyan]Creating commit...[/cyan]")
                         self.repo.index.commit(p.commit_message)  # Yolo -> No editor
@@ -772,7 +782,7 @@ class InteractiveCLI:
                         reset_staged_changes(self.repo)
                         yolo_successful = False
                         break
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - stop batch workflow safely
                         console.print(
                             f"[bold red]An unexpected error occurred processing proposal: {e}[/bold red]"
                         )
@@ -917,7 +927,7 @@ def get_repo() -> git.Repo:
     except git.InvalidGitRepositoryError:
         console.print("[bold red]Error: Invalid Git repository detected.[/bold red]")
         sys.exit(1)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - repository initialization boundary
         console.print(
             f"[bold red]Error initializing Git repository object: {e}[/bold red]"
         )
@@ -933,12 +943,12 @@ def run_commit(debug: bool = False, instruction: str | None = None):
     repo = get_repo()
 
     try:
-        cli = InteractiveCLI(config, repo, custom_instruction=instruction)
+        cli = InteractiveCLI(get_config(), repo, custom_instruction=instruction)
         cli.run_commit_workflow()
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         sys.exit(1)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - top-level CLI error boundary
         # Catch-all for unexpected errors during async execution
         console.print(f"[bold red]An unexpected error occurred: {e}[/bold red]")
 
@@ -947,7 +957,7 @@ def run_commit(debug: bool = False, instruction: str | None = None):
             import traceback
 
             traceback.print_exc()
-            sys.exit(1)
+        sys.exit(1)
 
 
 @click.group(invoke_without_command=True)
@@ -1073,7 +1083,7 @@ def show():
     Example:
         vibegit config show
     """
-    pprint(config)
+    pprint(get_config())
 
 
 @config_cli.command()
@@ -1088,7 +1098,7 @@ def open():
     """
     import subprocess
 
-    subprocess.run(["open", CONFIG_PATH])
+    subprocess.run(["open", CONFIG_PATH], check=False)
 
 
 @config_cli.command()
@@ -1106,7 +1116,7 @@ def get(path: str):
         vibegit config get allow_excluding_changes
         vibegit config get watermark
     """
-    pprint(config.get_by_path(path))
+    pprint(get_config().get_by_path(path))
 
 
 @config_cli.command()
@@ -1129,8 +1139,9 @@ def set(path: str, value: str):
 
     Note: The configuration is immediately saved after setting the value.
     """
-    config.set_by_path(path, value)
-    config.save_config()
+    current_config = get_config()
+    current_config.set_by_path(path, value)
+    current_config.save_config()
 
 
 @config_cli.command()
