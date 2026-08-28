@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Any, ClassVar, cast
 
 import inquirer
 from rich.console import Console
@@ -20,19 +21,20 @@ class ConfigWizard:
     CUSTOM_OPENAI_OPTION = "Custom model (OpenAI API compatible)"
 
     # Model presets with friendly names and their Pydantic AI provider:model format
-    MODEL_PRESETS = {
-        "Gemini 3 Flash (Preview, Recommended)": "google-gla:gemini-3-flash-preview",
-        "Gemini 3 Pro (Preview)": "google-gla:gemini-3-pro-preview",
-        "Gemini 2.5 Flash": "google-gla:gemini-2.5-flash",
-        "Gemini 2.5 Pro": "google-gla:gemini-2.5-pro",
-        "GPT-5": "openai:gpt-5",
-        "GPT-5.2": "openai:gpt-5.2",
+    MODEL_PRESETS: ClassVar[dict[str, str]] = {
+        "Gemini 3.7 Flash (Recommended)": "google:gemini-3.7-flash",
+        "Gemini 3.5 Flash-Lite (Fast and cost-efficient)": "google:gemini-3.5-flash-lite",
+        "Gemini 3.1 Pro (Preview)": "google:gemini-3.1-pro-preview",
+        "GPT-5.6 Terra (Balanced)": "openai:gpt-5.6-terra",
+        "GPT-5.6 Sol (Highest quality)": "openai:gpt-5.6-sol",
+        "GPT-5.6 Luna (High volume)": "openai:gpt-5.6-luna",
         CUSTOM_OPENAI_OPTION: "custom_openai",
         CUSTOM_PYDANTIC_AI_OPTION: "custom",
     }
 
     # Map model name prefixes to their API key environment variables
-    MODEL_TO_API_KEY_ENV = {
+    MODEL_TO_API_KEY_ENV: ClassVar[dict[str, str]] = {
+        "google": "GOOGLE_API_KEY",
         "google-gla": "GOOGLE_API_KEY",
         "google_genai": "GOOGLE_API_KEY",
         "openai": "OPENAI_API_KEY",
@@ -43,14 +45,25 @@ class ConfigWizard:
     def __init__(self):
         self.config = Config()
 
+    @staticmethod
+    def _prompt(questions: list[Any]) -> dict[str, Any]:
+        answers = inquirer.prompt(questions)
+        if answers is None:
+            raise KeyboardInterrupt
+        return cast(dict[str, Any], answers)
+
     def run(self):
         """Run the interactive configuration wizard."""
         console.print("[bold blue]VibeGit Configuration Wizard[/bold blue]")
         console.print("Let's set up VibeGit for first use.\n")
 
-        self._configure_model()
-        self._configure_api_keys()
-        self._save_config()
+        try:
+            self._configure_model()
+            self._configure_api_keys()
+            self._save_config()
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Configuration cancelled.[/yellow]")
+            raise SystemExit(130) from None
 
         console.print(
             "\n[bold green]Configuration complete! VibeGit is ready to use.[/bold green]"
@@ -69,12 +82,15 @@ class ConfigWizard:
                 "model_choice",
                 message="Select an LLM model:",
                 choices=model_choices,
-                default=model_choices[0],  # Default to Gemini 2.5 Flash
+                default=model_choices[0],
             ),
         ]
 
-        answers = inquirer.prompt(questions)
+        answers = self._prompt(questions)
         model_choice = answers.get("model_choice")
+
+        if not isinstance(model_choice, str) or model_choice not in self.MODEL_PRESETS:
+            raise KeyboardInterrupt
 
         if model_choice == self.CUSTOM_PYDANTIC_AI_OPTION:
             custom_model = self._get_custom_model()
@@ -92,7 +108,7 @@ class ConfigWizard:
 
         console.print(f"[green]Model set to: {self.config.model.name}[/green]")
 
-    def _get_custom_model(self):
+    def _get_custom_model(self) -> str:
         """Prompt for a custom model name."""
         questions = [
             inquirer.Text(
@@ -102,10 +118,10 @@ class ConfigWizard:
             ),
         ]
 
-        answers = inquirer.prompt(questions)
-        return answers.get("custom_model")
+        answers = self._prompt(questions)
+        return str(answers["custom_model"]).strip()
 
-    def _get_openai_compatible_model(self):
+    def _get_openai_compatible_model(self) -> dict[str, str]:
         """Prompt for OpenAI-compatible connection details."""
         existing_model = self.config.model
         existing_is_openai = (
@@ -132,9 +148,9 @@ class ConfigWizard:
             ),
         ]
 
-        answers = inquirer.prompt(questions) or {}
-        base_url = answers.get("base_url", "").strip() or default_base_url
-        model_name = answers.get("model_name", "").strip() or default_model_name
+        answers = self._prompt(questions)
+        base_url = str(answers.get("base_url", "")).strip() or default_base_url
+        model_name = str(answers.get("model_name", "")).strip() or default_model_name
 
         if not base_url:
             console.print("[red]Base URL cannot be empty. Please try again.[/red]")
@@ -148,7 +164,7 @@ class ConfigWizard:
         api_key: str | None = None
 
         if existing_api_key:
-            confirm = inquirer.prompt(
+            confirm = self._prompt(
                 [
                     inquirer.Confirm(
                         "keep_api_key",
@@ -157,7 +173,7 @@ class ConfigWizard:
                     )
                 ]
             )
-            if confirm and confirm.get("keep_api_key", True):
+            if confirm.get("keep_api_key", True):
                 api_key = existing_api_key
             else:
                 api_key = self._prompt_for_openai_api_key()
@@ -172,19 +188,16 @@ class ConfigWizard:
 
     def _prompt_for_openai_api_key(self) -> str:
         while True:
-            answers = (
-                inquirer.prompt(
-                    [
-                        inquirer.Password(
-                            "api_key",
-                            message="Enter the API key",
-                            validate=lambda _, x: len(x.strip()) > 0,
-                        )
-                    ]
-                )
-                or {}
+            answers = self._prompt(
+                [
+                    inquirer.Password(
+                        "api_key",
+                        message="Enter the API key",
+                        validate=lambda _, x: len(x.strip()) > 0,
+                    )
+                ]
             )
-            api_key = answers.get("api_key", "").strip()
+            api_key = str(answers.get("api_key", "")).strip()
             if api_key:
                 return api_key
             console.print("[red]API key cannot be empty. Please try again.[/red]")
@@ -204,10 +217,9 @@ class ConfigWizard:
         # Determine which API key we need based on the model prefix
         api_key_env = None
 
-        for prefix, env_var in self.MODEL_TO_API_KEY_ENV.items():
-            if model_name.startswith(prefix):
-                api_key_env = env_var
-                break
+        provider, separator, _ = model_name.partition(":")
+        if separator:
+            api_key_env = self.MODEL_TO_API_KEY_ENV.get(provider)
 
         if not api_key_env:
             console.print(
@@ -216,7 +228,7 @@ class ConfigWizard:
             return
 
         # Check if the API key is already in the environment
-        if api_key_env in os.environ and os.environ[api_key_env]:
+        if os.environ.get(api_key_env):
             console.print(
                 f"[green]Found {api_key_env} in environment variables.[/green]"
             )
@@ -230,8 +242,8 @@ class ConfigWizard:
                 ),
             ]
 
-            answers = inquirer.prompt(questions)
-            if answers and answers["save_api_key"]:
+            answers = self._prompt(questions)
+            if answers["save_api_key"]:
                 self.config.api_keys[api_key_env] = os.environ[api_key_env]
                 console.print(f"[green]{api_key_env} saved to config.[/green]")
             else:
@@ -254,8 +266,8 @@ class ConfigWizard:
             ),
         ]
 
-        answers = inquirer.prompt(questions)
-        api_key = answers.get("api_key")
+        answers = self._prompt(questions)
+        api_key = str(answers.get("api_key", "")).strip()
 
         if api_key:
             # Set in both environment and config
@@ -272,7 +284,7 @@ class ConfigWizard:
         try:
             self.config.save_config()
             console.print(f"[green]Configuration saved to {CONFIG_PATH}[/green]")
-        except Exception as e:
+        except (OSError, TypeError) as e:
             console.print(f"[bold red]Error saving configuration: {e}[/bold red]")
             sys.exit(1)
 

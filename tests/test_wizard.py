@@ -2,6 +2,16 @@ from vibegit.config import Config, ContextFormattingConfig, ModelConfig
 from vibegit.wizard import ConfigWizard
 
 
+def test_model_presets_use_current_recommendations():
+    presets = ConfigWizard.MODEL_PRESETS
+
+    assert next(iter(presets.values())) == "google:gemini-3.7-flash"
+    assert "google:gemini-3.1-pro-preview" in presets.values()
+    assert "openai:gpt-5.6-sol" in presets.values()
+    assert "openai:gpt-5.6-terra" in presets.values()
+    assert "openai:gpt-5.6-luna" in presets.values()
+
+
 def build_config(model: ModelConfig) -> Config:
     return Config.model_construct(
         model=model,
