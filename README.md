@@ -1,7 +1,7 @@
-<h1 align="center">✨ VibeGit ✨</h1>
+<h1 align="center">VibeGit</h1>
 
 <p align="center">
-  <i>Spend more time (vibe) coding and less time cleaning your messy git repository.</i>
+  <i>Turn a busy Git working tree into focused, reviewable commits.</i>
 </p>
 
 <p align="center">
@@ -11,95 +11,98 @@
   <a href="https://pypi.org/pypi/vibegit/" target="_blank">
     <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="py_versions">
   </a>
+  <a href="https://github.com/kklemon/vibegit/actions/workflows/ci.yml" target="_blank">
+    <img src="https://github.com/kklemon/vibegit/actions/workflows/ci.yml/badge.svg" alt="CI status">
+  </a>
 </p>
 
 ---
 
-<p float="right" align="center">
-    <img src="resources/before-vibegit.png" width="45%">
-    <img src="resources/after-vibegit.png" width="45%">
+<p align="center">
+    <img src="resources/before-vibegit.png" alt="Working tree before using VibeGit" width="45%">
+    <img src="resources/after-vibegit.png" alt="Working tree after using VibeGit" width="45%">
 </p>
 
 <p align="center">
-^ You before discovering VibeGit
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;^ You after discovering VibeGit
+  <i>An example working tree before and after VibeGit groups the changes.</i>
 </p>
 
 ---
 
-## Never ever do manual Git housekeeping again
+## Turn mixed changes into focused commits
 
-Let's be honest. You know the problem. You spent hours or days working on a feature and forgot to group and commit changes once in a while. Suddenly you are facing 30 open file changes, related to a dozen or so different subtasks.
+During a long coding session, unrelated changes often accumulate in the same working tree. Turning them into small, coherent commits means repeatedly inspecting hunks, staging them, and writing matching commit messages.
 
-Now comes the fun part: **Crafting perfect, atomic commits.**
-
-You could:
-
-1.  Spend 20 minutes meticulously using `git add -p`, squinting at diffs like a code archaeologist.
-2.  Write a vague commit message like `"fix stuff"` and promise yourself you'll `rebase -i` later (spoiler: you won't).
-3.  Just `git commit -a -m "WIP"` and call it a day, leaving a dumpster fire for future you (or your poor colleagues).
-
-**There *has* to be a better way.**
-
-## Enter VibeGit: Your AI-Powered Git Housekeeper 🤖🧹
-
-> [!WARNING]
-> Brace yourself. What you're about to see might blow your mind.
-
-In your messy Git repository, just hit
+Run VibeGit from the repository:
 
 ```bash
 vibegit commit
 ```
 
-✨ **And it *automagically* groups related changes (hunks) together based on their *semantic meaning*!** ✨
-
-No more manual patch-adding hell. No more "what did I even change here?" moments.
-
-VibeGit analyzes your diff, considers your branch name, peeks at your recent commit history (for stylistic consistency, not blackmail... probably), and then proposes logical, beautifully grouped commits with **AI-generated commit messages**.
+VibeGit analyzes the diff, active branch, and recent commit history. It proposes semantically related groups of changes with generated commit messages, then lets you review or apply them.
 
 > [!NOTE]
-> VibeGit currently only works if at least one commit exists. If you want to use it in a freshly initialized repository, you may create an empty commit with `git commit --allow-empty -m "initial commit"`.
+> VibeGit requires a repository with at least one commit. In a new repository, you can create one with `git commit --allow-empty -m "initial commit"`.
 
-## Features That Will Make You Question Reality (or at Least Your Old Workflow)
+## Features
 
-*   🧠 **Semantic Hunk Grouping:** VibeGit doesn't just look at file names; it looks at *what the code does* to bundle related changes. It's like magic, but with more AI slop.
-*   ✍️ **AI-Generated Commit Messages:** Get sensible, well-formatted commit messages suggested for each group. Tweak them or use them as-is. Your commit log will suddenly look respectable.
-*   🔧 **Interactive Configuration Wizard:** A friendly setup process for first-time users that helps configure your preferred AI model and API keys.
-*   🤖 **Multiple Workflow Modes:**
-    *   **YOLO Mode:** Feeling lucky? Automatically apply all of VibeGit's proposals. What could possibly go wrong?
-    *   **Interactive Mode:** Review each proposed commit, edit the message in your default editor, and apply them one by one. For the cautious (or skeptical).
-    *   **Summary Mode:** Get a quick overview of what VibeGit plans to do before diving in.
-*   🚫 **Exclude Changes:** VibeGit will automatically exclude changes that shouldn't be committed such as API keys or unfinished work.
+* **Semantic grouping:** Groups related hunks by their purpose, including changes that span multiple files.
+* **Generated commit messages:** Suggests a concise message and explanation for each group.
+* **Review controls:** Inspect proposals, edit messages, skip groups, or apply the remaining proposals automatically.
+* **Configuration wizard:** Configures the model and API keys on first use.
+* **Change exclusions:** Can leave out changes that appear unfinished, erroneous, or sensitive.
 
-## Setup: Get Ready to Vibe
+## Installation and setup
 
 ### Requirements
 
-* A computer
-* Python>=3.11
+* [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended)
+* Git
+* Python 3.11 or newer when using another installation method
 
 ### Installation
 
-Via pip:
+Install VibeGit as an isolated command-line tool with uv:
 
+```bash
+uv tool install vibegit
 ```
+
+uv makes the `vibegit` executable available on your `PATH` without mixing VibeGit's dependencies into your projects. If uv reports that its executable directory is not on `PATH`, run `uv tool update-shell` and restart your shell.
+
+Upgrade VibeGit later with:
+
+```bash
+uv tool upgrade vibegit
+```
+
+To try VibeGit without installing it persistently, use `uv tool run` (or its `uvx` alias):
+
+```bash
+uv tool run vibegit --help
+# Equivalent:
+uvx vibegit --help
+```
+
+Alternative installation methods are also supported:
+
+```bash
+pipx install vibegit
+# Or in a dedicated virtual environment:
 pip install vibegit
 ```
 
-Via pipx:
+### Quick start
 
-```
-pipx install vibegit
-```
+Run these commands from your Git repository after installing VibeGit:
 
-**Run as tool without explicit installation with uv:**
-
-```
-uvx vibegit
+```bash
+vibegit init    # Add a starter .vibegitrules file
+vibegit config  # Choose a model and configure its API key
+vibegit commit  # Analyze changes and create semantic commits
 ```
 
-### Configuration
+### First-run configuration
 
 When you run VibeGit for the first time, it will launch an interactive configuration wizard to help you set up the most important settings:
 
@@ -113,37 +116,39 @@ vibegit config
 # Legacy alias (equivalent to the command above):
 vibegit config wizard
 ```
-Google's Gemini models are used by default for which you will need a Google AI Studio API key. If you don't have a Gemini API key yet, get one [here](https://aistudio.google.com/app/apikey).
+Google Gemini is the default provider and requires a Google AI Studio API key. You can create one in [Google AI Studio](https://aistudio.google.com/app/apikey).
 
 Selecting **Custom model (OpenAI API compatible)** lets you point VibeGit at any endpoint that implements the OpenAI Chat Completions API. The wizard will collect the base URL, model name, and API key and store them so that future runs interact with your custom endpoint automatically.
 
 Re-running the wizard with this option will pre-fill the previously saved base URL and model name, and you can choose whether to reuse or replace the stored API key.
 
-## Manual Configuration
+## Configuration reference
 
-Use `vibegit config show` to print the current configuration to the console.
+Use `vibegit config show` to print the current configuration.
 
-To set single configuration values, use `vibegit config set <path> <value>` and provide the configuration path in dot notation, e.g. `model.name`.
+To change one value, use `vibegit config set <path> <value>` with a dot-separated path such as `model.name`.
 
-For a more convenient editing of the whole configuration file, use `vibegit config open` which will open the config file in your system's default editor.
+Use `vibegit config open` to edit the complete configuration file in your system's default editor.
 
-Need to start over? Run the configuration wizard at any time with `vibegit config wizard` to reconfigure your settings.
+Run `vibegit config` at any time to start the wizard again.
 
 Below is a description of the most relevant configuration options.
 
 ### Models
 
-Gemini 2.5 Flash is used by default, as it provides arguably the best trade-off between performance, price and latency. However, you can use any model that supports structured outputs given a JSON schema.
+Gemini 3.7 Flash is used by default. It is Google's latest stable Flash model, is designed for complex coding and reliable multi-step work, and supports structured outputs. You can use any other model that supports structured outputs given a JSON schema.
 
-VibeGit has been tested with:
+The configuration wizard recommends these current general-purpose models:
 
-* Gemini 3 Flash (preview) (`google-gla:gemini-3-flash-preview`)
-* Gemini 3 Pro (preview) (`google-gla:gemini-3-pro-preview`)
+* Gemini 3.7 Flash (`google:gemini-3.7-flash`) — recommended default
+* Gemini 3.5 Flash-Lite (`google:gemini-3.5-flash-lite`) — fastest, cost-efficient Gemini option
+* Gemini 3.1 Pro (preview) (`google:gemini-3.1-pro-preview`) — advanced problem solving
+* GPT-5.6 Terra (`openai:gpt-5.6-terra`) — balanced intelligence and cost
+* GPT-5.6 Sol (`openai:gpt-5.6-sol`) — highest-quality complex reasoning and coding
+* GPT-5.6 Luna (`openai:gpt-5.6-luna`) — cost-sensitive, high-volume work
 * Grok Code Fast (`grok:grok-code-fast-1`)
-* GPT-5 (`openai:gpt-5`)
-* GPT-5.2 (`openai:gpt-5.2`)
 
-You can use any other model that meets the aforementioned requirements and is supported by Pydantic AI. Model names should be provided in the `provider:model` format (for example, `openai:gpt-4o` or `google-gla:gemini-2.5-flash`).
+VibeGit installs Pydantic AI Slim with the Google and OpenAI extras. The OpenAI extra also supports Grok and custom OpenAI-compatible endpoints. Other Pydantic AI providers require you to install their corresponding optional dependency separately. Model names should be provided in the `provider:model` format (for example, `openai:gpt-5.6-terra` or `google:gemini-3.7-flash`). Legacy `google-gla:` and `google_genai:` model names are migrated automatically.
 
 To configure a model, use the following command:
 
@@ -159,38 +164,44 @@ vibegit config set model.base_url https://api.example.com/v1
 vibegit config set model.api_key <your-api-key>
 ```
 
-You may have to provide a provider-specific API key which can be done by setting the API key under the `api_keys` config field. For instance, to supply an API key for Grok models, run the following command:
+Provider-specific API keys can also be stored under the `api_keys` configuration field. For example, configure Grok with:
 
 ```bash
 vibegit config set api_keys.GROK_API_KEY <your-api-key>
 ```
 
 > [!NOTE]
-> Models can't be configured on repository level at the moment.
+> Model selection is currently global rather than repository-specific.
 
-### Incomplete Commit Proposals
+### Excluding changes
 
-VibeGit can be configured to generate commit proposals that include all open changes and exclude changes which may look unfinished or contain obvious errors (enabled by default).
+By default, VibeGit may exclude changes that appear unfinished, erroneous, or sensitive instead of forcing them into a commit proposal.
 
-To control this option, use
+Control this behavior with:
 
 ```bash
 vibegit config set allow_excluding_changes <true/false>
 ```
 
-The behavior of the excluding behavior can be customized with a `.vibegitrules` file (see next section).
+Use a `.vibegitrules` file to provide project-specific guidance for exclusions and commit grouping.
 
-## .vibegitrules
+## Project rules (`.vibegitrules`)
 
-You may provide a `.vibegitrules` file in the root of your repository with custom instructions for the generation of commit proposals. Typical use cases are:
+Add a `.vibegitrules` file to the repository root to customize commit proposals. Typical uses include:
 
 * Commit message style
 * Commit scope and granularity
 * Excluding certain files or changes, either on semantic grounds or based on filetype
 
-See [VibeGit's `.vibegitrules` file](https://github.com/kklemon/vibegit/blob/master/.vibegitrules) for an example.
+Create a starter file based on VibeGit's own rules by running this in your project directory:
 
-### Custom Instructions on the Fly
+```bash
+vibegit init
+```
+
+The command preserves an existing `.vibegitrules` file. Use `vibegit init --force` to replace it with the bundled template. See [VibeGit's `.vibegitrules` file](https://github.com/kklemon/vibegit/blob/master/.vibegitrules) for the current template.
+
+### One-off instructions
 
 Use the `--instruction` flag with `vibegit commit` to provide one-off custom instructions without modifying `.vibegitrules`:
 
@@ -199,30 +210,30 @@ vibegit commit -i "group all test files together"
 vibegit commit -i "do not include changes related to the cli"
 ```
 
-This is handy for temporary requirements or experimenting with different commit styles.
+This is useful for temporary requirements or trying a different commit style.
 
-## The Future: More Vibes, More Git? 🚀
+## Roadmap
 
-At the moment VibeGit only supports the `commit` command. But the vision is grand! Imagine AI assistance for:
+VibeGit currently changes Git history only through the `commit` workflow; `init` and `config` are setup utilities. Possible future workflows include:
 
-*   `vibegit merge` (Resolving conflicts? Maybe too ambitious...)
-*   `vibegit rebase` (Interactive rebasing suggestions?)
-*   `vibegit checkout` (Suggesting relevant branches?)
+* `vibegit merge` for conflict resolution
+* `vibegit rebase` for interactive rebase suggestions
+* `vibegit checkout` for relevant branch suggestions
 
-We're aiming to turn this quirky tool into a full-fledged AI Git companion.
+## Contributing
 
-## Contributing (Please Help Us Vibe Better!)
+Bug reports, feature suggestions, and pull requests are welcome.
 
-Found a bug? Have a killer feature idea? Did the AI `rm -rf`ed your repository once again?
+Pull requests and pushes are checked by CI. Run the same quality checks locally with:
 
-Open an issue or submit a pull request! We appreciate constructive feedback and contributions. Let's make Git less of a chore, together.
+```bash
+uv sync --locked
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+uv run pytest -q
+```
 
 ## License
 
-Currently under MIT License. Feel free to blatantly steal as much code as you want.
-
----
-
-<p align="center">
-  <b>Happy Vibing! ✨</b>
-</p>
+VibeGit is available under the MIT License. See [LICENSE](LICENSE).

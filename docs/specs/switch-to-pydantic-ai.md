@@ -41,7 +41,7 @@
 - Temperature and similar parameters are set via `ModelSettings`.
 - Provider strings and env vars used by Pydantic AI differ from LangChain:
   - OpenAI: `openai:<model>` with `OPENAI_API_KEY`.
-  - Google Gemini (GLA): `google-gla:<model>` with `GOOGLE_API_KEY`.
+  - Google Gemini: `google:<model>` with `GOOGLE_API_KEY`.
   - xAI Grok: `grok:<model>` with `GROK_API_KEY`.
   - Custom OpenAI-compatible endpoints require `OpenAIProvider(base_url=..., api_key=...)`.
 
@@ -59,8 +59,8 @@ prefixes to Pydantic AI equivalents to avoid breaking existing configs.
 ## Model Mapping Strategy
 Keep the current `model.name` format but normalize to Pydantic AI model strings:
 - **OpenAI**: `openai:<model>`
-- **Gemini (Google GLA)**: `google-gla:<model>`
-  - Map legacy `google_genai:<model>` → `google-gla:<model>`.
+- **Gemini (Google)**: `google:<model>`
+  - Map legacy `google-gla:<model>` and `google_genai:<model>` → `google:<model>`.
 - **xAI/Grok**: `grok:<model>`
   - Map legacy `xai:<model>` → `grok:<model>`.
 - **Custom OpenAI-compatible**:
@@ -80,7 +80,7 @@ Create a small module (e.g. `vibegit/llm.py`) that:
   - `model` is either a Pydantic AI model string or a model instance.
   - `model_settings` is a `ModelSettings` object when temperature is set.
 - Normalizes legacy prefixes:
-  - `google_genai:` → `google-gla:`
+  - `google-gla:` and `google_genai:` → `google:`
   - `xai:` → `grok:`
 - Builds a custom OpenAI-compatible model if `base_url` is provided.
 - Optionally mirrors `XAI_API_KEY` → `GROK_API_KEY` for backward compatibility.
@@ -127,10 +127,11 @@ Acceptance criteria:
 ### 5) Update the wizard and docs to remove LangChain wording
 In `vibegit/wizard.py`:
 - Replace "LangChain format" with "Pydantic AI format (`<provider>:<model>`)".
-- Update presets to Pydantic AI names:
-  - `google-gla:gemini-2.5-flash` (default)
-  - `google-gla:gemini-2.5-pro`
-  - `openai:gpt-4o`, `openai:gpt-4.1`, `openai:o4-mini`, `openai:o3-mini`
+- Update presets to Pydantic AI names (refreshed after the migration):
+  - `google:gemini-3.7-flash` (default)
+  - `google:gemini-3.5-flash-lite`
+  - `google:gemini-3.1-pro-preview`
+  - `openai:gpt-5.6-sol`, `openai:gpt-5.6-terra`, `openai:gpt-5.6-luna`
   - `grok:<model>` for xAI
 - Consider keeping legacy labels but mapping behind the scenes for compatibility.
 
@@ -162,7 +163,7 @@ Acceptance criteria:
 ### 7) Update dependencies and lockfile
 In `pyproject.toml`:
 - Remove LangChain packages.
-- Add `pydantic-ai` (or `pydantic-ai-slim`) with required extras:
+- Add `pydantic-ai-slim` with only the required extras:
   - `openai` for OpenAI and OpenAI-compatible providers
   - `google` for Gemini
 - Ensure `pydantic` version remains compatible (Pydantic AI requires v2).
@@ -176,7 +177,7 @@ Acceptance criteria:
 ## Compatibility and Breaking Changes
 - Keep `model.name` format `provider:model` to avoid config migration.
 - Map legacy prefixes transparently:
-  - `google_genai:` → `google-gla:`
+  - `google-gla:` and `google_genai:` → `google:`
   - `xai:` → `grok:`
 - Handle env var differences:
   - xAI uses `GROK_API_KEY` (not `XAI_API_KEY`)
