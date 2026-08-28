@@ -1,10 +1,10 @@
 import os
 import subprocess
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Iterator
 from urllib.parse import urlparse
 
 import git
@@ -28,7 +28,12 @@ class TestRepoConfig:
         with tempfile.TemporaryDirectory(prefix=repo_name) as temp_dir:
             repo_path = temp_dir
 
-            call = partial(subprocess.call, cwd=repo_path, stdout=subprocess.DEVNULL)
+            call = partial(
+                subprocess.run,
+                cwd=repo_path,
+                stdout=subprocess.DEVNULL,
+                check=True,
+            )
 
             call(["git", "init"])
             call(["git", "remote", "add", "origin", self.repo_url])
@@ -68,12 +73,12 @@ test_repositories: dict[str, TestRepoConfig] = {
 
 
 test_models = [
-    "google-gla:gemini-3-flash-preview",
-    "google-gla:gemini-3-pro-preview",
-    "google-gla:gemini-2.5-flash",
-    "google-gla:gemini-2.5-pro",
-    "openai:gpt-5",
-    "openai:gpt-5.2",
+    "google:gemini-3.7-flash",
+    "google:gemini-3.5-flash-lite",
+    "google:gemini-3.1-pro-preview",
+    "openai:gpt-5.6-terra",
+    "openai:gpt-5.6-sol",
+    "openai:gpt-5.6-luna",
 ]
 
 
@@ -89,7 +94,7 @@ def chat_model(request):
     model_name = request.param
     if model_name.startswith("openai:") and not os.environ.get("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY is not set")
-    if model_name.startswith("google-gla:") and not os.environ.get("GOOGLE_API_KEY"):
+    if model_name.startswith("google:") and not os.environ.get("GOOGLE_API_KEY"):
         pytest.skip("GOOGLE_API_KEY is not set")
     if model_name.startswith("grok:") and not os.environ.get("GROK_API_KEY"):
         pytest.skip("GROK_API_KEY is not set")

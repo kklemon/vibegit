@@ -1,24 +1,43 @@
 name: CI
-on: push
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
 jobs:
-  build:
+  quality:
+    name: Quality checks
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
-      - name: Install the project
-        run: uv sync --locked --all-extras --dev
-      - name: Run Ruff
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          version: "0.12.6"
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint with Ruff
         run: uv run ruff check --output-format=github .
-      - name: Install VibeGit
-        run: uv pip install .
-      - name: Set up Git
-        run: |
-          git config --global user.name "VibeGit"
-          git config --global user.email "vibegit@vibegit.com"
-      - name: Run Tests
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: uv run pytest -n auto -vv
+
+      - name: Check formatting with Ruff
+        run: uv run ruff format --check .
+
+      - name: Type check with ty
+        run: uv run ty check
+
+      - name: Run tests
+        run: uv run pytest -q

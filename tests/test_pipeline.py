@@ -1,8 +1,18 @@
+import os
+
 import pytest
-from conftest import test_repositories, test_models
+from conftest import test_models, test_repositories
 
 from vibegit.ai import CommitProposalAI
 from vibegit.git import CommitProposalContext, GitContextFormatter, get_git_status
+
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        os.environ.get("VIBEGIT_RUN_LIVE_TESTS") != "1",
+        reason="set VIBEGIT_RUN_LIVE_TESTS=1 to run external, paid model tests",
+    ),
+]
 
 
 @pytest.mark.parametrize("repo", list(test_repositories), indirect=True)
@@ -22,9 +32,8 @@ def test_pipeline(repo, chat_model):
 
     result = ai.propose_commits(context)
 
-    ctx.validate_commit_proposal(result)
-
     assert result is not None
+    ctx.validate_commit_proposal(result)
     assert len(result.commit_proposals) > 0
 
     num_commits_before = len(list(repo.iter_commits()))
