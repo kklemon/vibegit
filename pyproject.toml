@@ -10,7 +10,7 @@ dependencies = [
     "gitpython>=3.1.44",
     "inquirer>=3.4.0",
     "platformdirs>=4.3.7",
-    "pydantic-ai",
+    "pydantic-ai-slim[google,openai]>=2.35.1",
     "pydantic>=2.11.3",
     "pydantic-settings>=2.9.1",
     "python-dotenv>=1.1.0",
@@ -22,30 +22,31 @@ dependencies = [
 [project.scripts]
 vibegit = "vibegit.cli:cli" 
 
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools]
 packages = ["vibegit"]
 
+[tool.setuptools.package-data]
+vibegit = ["default.vibegitrules"]
+
 [dependency-groups]
 dev = [
-    "mypy>=1.15.0",
     "pre-commit>=4.2.0",
     "pytest>=8.3.5",
     "pytest-xdist>=3.6.1",
     "ruff>=0.11.8",
+    "ty>=0.0.75",
     "types-requests>=2.32.0.20250328",
     "types-toml>=0.10.8.20240310",
 ]
 
-[tool.mypy]
-check_untyped_defs = true
-#disallow_any_unimported = true
-#disallow_untyped_defs = true # annoying
-no_implicit_optional = true
-ignore_missing_imports = true
-warn_return_any = true
-warn_unused_ignores = true
-show_error_codes = true
-strict_optional = false
-plugins = "pydantic.mypy"
+[tool.ty.src]
+include = ["vibegit"]
 
-exclude = ["build"]
+[tool.pytest.ini_options]
+markers = [
+    "live: tests that clone external repositories and call paid model APIs",
+]
