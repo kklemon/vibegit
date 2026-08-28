@@ -176,7 +176,7 @@ class ContextFormattingConfig(BaseSettings):
 
 
 class ModelConfig(BaseSettings):
-    name: str = "google-gla:gemini-2.5-flash"
+    name: str = "google:gemini-3.7-flash"
     temperature: float | None = None  # Use the default temperature
     base_url: str | None = None
     api_key: str | None = None
@@ -187,8 +187,10 @@ class ModelConfig(BaseSettings):
 
 
 class Config(BaseSettings):
-    model: ModelConfig = ModelConfig()
-    context_formatting: ContextFormattingConfig = ContextFormattingConfig()
+    model: ModelConfig = Field(default_factory=ModelConfig)
+    context_formatting: ContextFormattingConfig = Field(
+        default_factory=ContextFormattingConfig
+    )
     api_keys: dict[str, str] = Field(default_factory=dict)
     allow_excluding_changes: bool = True
     watermark: bool = True

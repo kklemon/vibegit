@@ -1,4 +1,7 @@
+import pytest
+
 from vibegit.config import ModelConfig
+from vibegit.llm import _build_openai_model, resolve_model
 
 
 def test_model_config_openai_compatible(monkeypatch):
@@ -39,3 +42,26 @@ def test_model_config_default_provider(monkeypatch):
 
     assert result == ("model_instance", None)
     assert captured_config["config"] is config
+
+
+def test_default_model_is_current_recommended_gemini():
+    assert ModelConfig().name == "google:gemini-3.7-flash"
+
+
+@pytest.mark.parametrize("legacy_provider", ["google-gla", "google_genai"])
+def test_legacy_google_provider_is_normalized(legacy_provider):
+    model, model_settings = resolve_model(
+        ModelConfig(name=f"{legacy_provider}:gemini-3.7-flash")
+    )
+
+    assert model == "google:gemini-3.7-flash"
+    assert model_settings is None
+
+
+def test_openai_compatible_model_can_be_constructed():
+    model = _build_openai_model(
+        "custom-model", "https://api.example.com/v1", "secret-key"
+    )
+
+    assert model.model_name == "custom-model"
+    assert model.base_url == "https://api.example.com/v1/"

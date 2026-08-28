@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import os
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from vibegit.config import ModelConfig
 
 
 LEGACY_PROVIDER_MAP: dict[str, str] = {
-    "google_genai": "google-gla",
+    "google-gla": "google",
+    "google_genai": "google",
     "xai": "grok",
 }
 
@@ -38,13 +39,14 @@ def _build_openai_model(
     base_url: str | None,
     api_key: str | None,
 ) -> Any:
-    from pydantic_ai.models.openai import OpenAIChatModel, OpenAIProvider
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
 
     provider = OpenAIProvider(base_url=base_url, api_key=api_key)
     return OpenAIChatModel(model_name, provider=provider)
 
 
-def resolve_model(config: "ModelConfig") -> tuple[Any, Any | None]:
+def resolve_model(config: ModelConfig) -> tuple[Any, Any | None]:
     provider, model_name = _split_model_name(config.name, config.model_provider)
     provider = _normalize_provider(provider)
 
