@@ -35,16 +35,8 @@ class CommitProposalAI:
 
     def propose_commits(
         self, context: str
-    ) -> CommitProposalsResultSchema | IncompleteCommitProposalsResultSchema | None:
-        result = self._agent.run_sync(context)
-
-        if hasattr(result, "output"):
-            result = result.output
-        elif hasattr(result, "data"):
-            result = result.data
-
-        if result is None:
-            return None
+    ) -> CommitProposalsResultSchema | IncompleteCommitProposalsResultSchema:
+        result = self._agent.run_sync(context).output
 
         if self.allow_excluding_changes:
             return cast(IncompleteCommitProposalsResultSchema, result)
