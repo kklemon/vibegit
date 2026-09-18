@@ -22,7 +22,7 @@ class ConfigWizard:
 
     # Model presets with friendly names and their Pydantic AI provider:model format
     MODEL_PRESETS: ClassVar[dict[str, str]] = {
-        "Gemini 3.7 Flash (Recommended)": "google:gemini-3.7-flash",
+        "Gemini 3.7 Flash (Recommended)": "google:gemini-3.8-flash",
         "Gemini 3.5 Flash-Lite (Fast and cost-efficient)": "google:gemini-3.5-flash-lite",
         "Gemini 3.1 Pro (Preview)": "google:gemini-3.1-pro-preview",
         "GPT-5.6 Terra (Balanced)": "openai:gpt-5.6-terra",

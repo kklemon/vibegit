@@ -176,7 +176,7 @@ class ContextFormattingConfig(BaseSettings):
 
 
 class ModelConfig(BaseSettings):
-    name: str = "google:gemini-3.7-flash"
+    name: str = "google:gemini-3.8-flash"
     temperature: float | None = None  # Use the default temperature
     base_url: str | None = None
     api_key: str | None = None

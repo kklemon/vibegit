@@ -45,16 +45,16 @@ def test_model_config_default_provider(monkeypatch):
 
 
 def test_default_model_is_current_recommended_gemini():
-    assert ModelConfig().name == "google:gemini-3.7-flash"
+    assert ModelConfig().name == "google:gemini-3.8-flash"
 
 
 @pytest.mark.parametrize("legacy_provider", ["google-gla", "google_genai"])
 def test_legacy_google_provider_is_normalized(legacy_provider):
     model, model_settings = resolve_model(
-        ModelConfig(name=f"{legacy_provider}:gemini-3.7-flash")
+        ModelConfig(name=f"{legacy_provider}:gemini-3.8-flash")
     )
 
-    assert model == "google:gemini-3.7-flash"
+    assert model == "google:gemini-3.8-flash"
     assert model_settings is None
 
 
