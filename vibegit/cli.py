@@ -34,6 +34,7 @@ from vibegit.wizard import ConfigWizard, run_wizard_if_needed
 # Temporary fix. See https://github.com/grpc/grpc/issues/37642
 # Update: Doesn't seem to work.
 os.environ["GRPC_VERBOSITY"] = "NONE"
+os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 
 console = Console()
 RULES_FILENAME = ".vibegitrules"
