@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-vibegit = "vibegit.cli:cli" 
+vibegit = "vibegit.cli:cli"
 
 [build-system]
 requires = ["setuptools>=75"]

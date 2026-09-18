@@ -148,7 +148,7 @@ The configuration wizard recommends these current general-purpose models:
 * GPT-5.6 Luna (`openai:gpt-5.6-luna`) — cost-sensitive, high-volume work
 * Grok Code Fast (`grok:grok-code-fast-1`)
 
-VibeGit installs Pydantic AI Slim with the Google and OpenAI extras. The OpenAI extra also supports Grok and custom OpenAI-compatible endpoints. Other Pydantic AI providers require you to install their corresponding optional dependency separately. Model names should be provided in the `provider:model` format (for example, `openai:gpt-5.6-terra` or `google:gemini-3.7-flash`). Legacy `google-gla:` and `google_genai:` model names are migrated automatically.
+VibeGit installs Pydantic AI Slim with the Google and OpenAI extras. The OpenAI extra also supports Grok and custom OpenAI-compatible endpoints. Other Pydantic AI providers require you to install their corresponding optional dependency separately. Model names should be provided in the `provider:model` format (for example, `openai:gpt-5.6-terra` or `google:gemini-3.8-flash`). Legacy `google-gla:` and `google_genai:` model names are migrated automatically.
 
 To configure a model, use the following command:
 
