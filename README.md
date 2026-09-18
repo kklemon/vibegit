@@ -140,7 +140,7 @@ Gemini 3.7 Flash is used by default. It is Google's latest stable Flash model, i
 
 The configuration wizard recommends these current general-purpose models:
 
-* Gemini 3.7 Flash (`google:gemini-3.7-flash`) — recommended default
+* Gemini 3.7 Flash (`google:gemini-3.8-flash`) — recommended default
 * Gemini 3.5 Flash-Lite (`google:gemini-3.5-flash-lite`) — fastest, cost-efficient Gemini option
 * Gemini 3.1 Pro (preview) (`google:gemini-3.1-pro-preview`) — advanced problem solving
 * GPT-5.6 Terra (`openai:gpt-5.6-terra`) — balanced intelligence and cost
