@@ -1,5 +1,12 @@
-Use all-lowercase commit messages without a tag prefix, e.g. "add feature for better vibin'".
+Write all commit subject lines entirely in lowercase. Never capitalize the first word and do not use a trailing period.
 
-Make the commits relatively small and decompose them on semantic and logical level. Keep the commit message short and simple. Don't use commit descriptions.
+Do not use Conventional Commit types (like feat:, fix:, chore:), scopes, ticket identifiers, or emojis.
 
-Formatting related changes should be grouped into one commit.
+Use the imperative mood for subject lines, beginning with action verbs such as add, update, implement, remove, support, switch, or bump. Keep the message concise and confined to a single line without a body or trailers.
+
+Examples from repository history:
+- add interactive button bar and mouse support to tui
+- update readme for button bar and confirmation settings
+- implement ratatui terminal user interface
+
+Group changes into focused, cohesive commits representing one logical change. When introducing or modifying functionality, include its relevant unit or smoke tests in the same commit. Keep documentation, CI workflows, packaging configurations, and lockfile updates isolated in dedicated commits.
