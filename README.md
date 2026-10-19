@@ -77,12 +77,12 @@ Git 2.25 or newer must be on your `PATH`.
 ## Quick start
 
 ```bash
-vibegit init     # add a starter .vibegitrules to the project (optional)
 vibegit config   # pick a model and store its API key
+vibegit init     # derive .vibegitrules from the project's history and review it
 vibegit commit   # review and apply proposed commits
 ```
 
-The setup wizard also runs automatically the first time `vibegit commit` finds no configuration.
+The setup wizard runs automatically the first time `vibegit commit` finds no configuration, and `vibegit commit` offers to derive `.vibegitrules` when a repository has none yet.
 
 ## The interface
 
@@ -196,10 +196,27 @@ The legacy `google-gla:`, `google_genai:` and `xai:` prefixes are still accepted
 | `context_formatting.truncate_lines` | `240` | Cut long diff lines before sending them |
 | `context_formatting.max_file_size_kb` | `512` | Larger files are sent as a placeholder only |
 | `confirmations.commit_all`, `.push`, `.rerun`, `.quit`, `.unstage` | `true` | Ask before committing all, pushing, regenerating, quitting with pending proposals, or unstaging. Pressing `Y` in the dialog sets the flag to `false`; set it back to `true` to ask again |
+| `confirmations.derive_rules` | `true` | Offer to derive `.vibegitrules` when a repository has none |
+| `init.commits` | `20` | Recent non-merge commits analysed by `vibegit init` |
+| `init.max_files_per_commit`, `init.max_lines_per_file` | `8`, `20` | Diff detail per commit sent to the model during `init` |
+| `init.max_total_kb` | `150` | Older commits are dropped once the rendered history exceeds this size |
 
 ## Project rules (`.vibegitrules`)
 
-A `.vibegitrules` file in the repository root customises proposals: message style, granularity, what to exclude. `vibegit init` creates a starter file (`--force` replaces an existing one). The `-i` flag and the `i` key provide one-off instructions that take priority over the file.
+A `.vibegitrules` file in the repository root customises proposals: message style, granularity, grouping, what to exclude. The `-i` flag and the `i` key provide one-off instructions that take priority over the file.
+
+`vibegit init` derives the file from the repository's own history: it renders the last `init.commits` non-merge commits (messages plus abbreviated diffs, at most `init.max_files_per_commit` files and `init.max_lines_per_file` lines per file), asks the model to describe the conventions it sees, and shows the result for review before anything is written. The review screen lists the observed conventions and the proposed file; you can write it, edit it in place or in `$EDITOR`, regenerate, fall back to the bundled template, or cancel.
+
+```bash
+vibegit init               # analyse the history, review, write
+vibegit init -n 40         # analyse more commits
+vibegit init --yes         # write without the review (for scripts)
+vibegit init --print       # print the derived rules instead of writing
+vibegit init --template    # write the bundled template without analysing anything
+vibegit init --force       # replace an existing file
+```
+
+When `vibegit commit` runs in a repository without `.vibegitrules`, it offers the same derivation first (`y` derive, `n` not now, `N` never ask; the last choice is stored as `confirmations.derive_rules`). Repositories without commits get the bundled template.
 
 ## What VibeGit does to your repository
 
