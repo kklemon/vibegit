@@ -21,7 +21,7 @@ jobs:
         include:
           - { name: linux-x86_64, os: ubuntu-latest, target: x86_64 }
           - { name: linux-aarch64, os: ubuntu-24.04-arm, target: aarch64 }
-          - { name: macos-x86_64, os: macos-13, target: x86_64 }
+          - { name: macos-x86_64, os: macos-15-intel, target: x86_64 }
           - { name: macos-aarch64, os: macos-latest, target: aarch64 }
           - { name: windows-x86_64, os: windows-latest, target: x64 }
     steps:
