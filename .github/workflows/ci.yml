@@ -8,36 +8,49 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Quality checks
-    runs-on: ubuntu-latest
+  rust:
+    name: Rust checks
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          enable-cache: true
-          version: "0.12.6"
+          components: rustfmt, clippy
 
-      - name: Install Python
-        run: uv python install 3.11
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
-      - name: Install dependencies
-        run: uv sync --locked
+      - name: Format
+        run: cargo fmt --check
 
-      - name: Lint with Ruff
-        run: uv run ruff check --output-format=github .
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
 
-      - name: Check formatting with Ruff
-        run: uv run ruff format --check .
+      - name: Test
+        run: cargo test
 
-      - name: Type check with ty
-        run: uv run ty check
-
-      - name: Run tests
-        run: uv run pytest -q
+  wheel:
+    name: Build wheel (maturin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Build wheel
+        run: uvx maturin build --release --out dist
+      - name: Smoke test the wheel
+        run: uvx --from dist/*.whl vibegit --version
