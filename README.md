@@ -26,53 +26,32 @@
 
 ---
 
-## Turn mixed changes into focused commits
-
-During a long coding session, unrelated changes pile up in the same working tree. Turning them into small, coherent commits means inspecting hunks, staging them one by one and writing matching messages.
-
-Run VibeGit from anywhere inside the repository:
+During a long coding session, unrelated changes pile up in the same working tree. Turning them into small, coherent commits means inspecting hunks, staging them one by one and writing matching messages. VibeGit does that for you:
 
 ```bash
 vibegit commit
 ```
 
-VibeGit reads the diff, the current branch and the recent history, asks a model for semantically related groups of hunks with commit messages, and opens an interactive interface where you review, rename, reorder, skip and apply them.
+It reads the diff, the current branch and the recent history, asks a model for semantically related groups of hunks with commit messages, and opens an interactive review where you edit, reorder, skip and apply them.
 
-VibeGit is a single native binary (written in Rust) that drives the `git` command line. It never modifies your working tree: it only stages exactly the hunks it was told to and creates commits, so every commit contains precisely the bytes that are in your files.
+VibeGit is a single native binary that drives the `git` command line. It never modifies your working tree: it only stages exactly the hunks it was told to and creates commits, so every commit contains precisely the bytes in your files.
 
 ## Features
 
-* **Semantic grouping:** related hunks become one commit, including changes that span several files.
-* **Generated messages:** a concise subject (and body, if the project style uses one) for every group.
-* **Interactive review:** scroll through proposals, read the diff, edit messages in place or in `$EDITOR`, skip or reorder proposals, commit one at a time or all at once, push when done.
-* **Project rules and one-off instructions:** `.vibegitrules` steers message style and granularity; `-i "..."` overrides it for one run and can also be entered from the interface.
-* **Change exclusions:** the model may set aside changes that look unfinished or sensitive; they are shown separately and never committed silently.
-* **Many providers:** Google Gemini, OpenAI, xAI Grok, Anthropic, Ollama, Groq, DeepSeek, Cohere, OpenRouter, Together, Fireworks, and any OpenAI-compatible endpoint.
-* **Robust git handling:** binaries, mode changes, symlinks, type changes, submodule pointer updates, CRLF, missing final newlines, unicode paths, detached and unborn HEAD, and unusual `diff.*` configuration all work; merges in progress and conflicts are refused before anything is written.
+* **Semantic grouping** of related hunks into commits, including changes that span several files.
+* **Generated messages** that follow the style of the repository, guided by a `.vibegitrules` file derived from your own history.
+* **Interactive review** with a diff viewer, in-place or `$EDITOR` message editing, reordering, skipping, and a button bar with mouse support; press `?` for all keys.
+* **Change exclusions:** changes that look unfinished or sensitive are set aside and shown separately, never committed silently.
+* **Many providers:** Google Gemini, OpenAI, xAI Grok, Anthropic, Ollama, Groq, DeepSeek and others, plus any OpenAI-compatible endpoint.
+* **Robust git handling:** binaries, mode changes, symlinks, submodules, CRLF, unicode paths, detached and unborn HEAD, and unusual `diff.*` configuration all work; merges in progress and conflicts are refused before anything is written.
 
 ## Installation
 
-### With uv (recommended)
-
 ```bash
-uv tool install vibegit
+uv tool install vibegit     # or: pipx install vibegit, pip install vibegit
 ```
 
-Prebuilt wheels contain the binary, so no Rust toolchain or Python dependencies are needed. Upgrade with `uv tool upgrade vibegit`, or try it without installing:
-
-```bash
-uvx vibegit --help
-```
-
-`pipx install vibegit` and `pip install vibegit` work the same way.
-
-### From source
-
-```bash
-cargo install --path .
-```
-
-Git 2.25 or newer must be on your `PATH`.
+Prebuilt wheels contain the binary, so no Rust toolchain or Python dependencies are needed. `uvx vibegit` runs it without installing. Git 2.25 or newer must be on your `PATH`. To build from source, run `cargo install --path .`.
 
 ## Quick start
 
@@ -82,168 +61,56 @@ vibegit init     # derive .vibegitrules from the project's history and review it
 vibegit commit   # review and apply proposed commits
 ```
 
-The setup wizard runs automatically the first time `vibegit commit` finds no configuration, and `vibegit commit` offers to derive `.vibegitrules` when a repository has none yet.
+Both setup steps also happen on demand: the wizard runs when no configuration exists, and `vibegit commit` offers to derive `.vibegitrules` when a repository has none.
 
-## The interface
+## Commands
 
-```
- VibeGit  ~/projects/app on main  model google:gemini-3.8-flash
-┌ Proposals (3 pending, 1 committed) ─┐┌ Proposal 2 of 4 ───────────────────────────┐
-│ ✔  1 add rust git runner            ││ Message                                    │
-│▶○  2 parse porcelain v2 status      ││   parse porcelain v2 status                │
-│ ○  3 wire the interface             ││                                            │
-│ ⊘  4 fix typo in readme             ││ Explanation                                │
-│ !  excluded: scratch.py             ││   These hunks introduce the status parser  │
-│                                     ││                                            │
-│                                     ││ Files (2)                                  │
-│                                     ││   M src/git/status.rs +120 -3              │
-│                                     ││   A tests/status.rs +80 -0                 │
-└─────────────────────────────────────┘└────────────────────────────────────────────┘
- 4 proposal(s) for 9 change unit(s) in 5 file(s).
- [c Commit] [C Commit all] [e Edit] [d Diff] [s Skip] [i Instruct] [r Regenerate] [p Push] [? Help] [q Quit]
-```
-
-The bottom row is a button bar. Every button shows its shortcut; `Tab` moves the keyboard focus into the bar, `←` `→` choose a button, `Enter` runs it, and buttons that do not apply to the selection are dimmed. The mouse works too: click a button or a proposal, scroll with the wheel. Dialogs show their choices as buttons as well.
-
-| Key | Action |
-| --- | --- |
-| `↑` `↓` `j` `k`, `PgUp` `PgDn`, `g` `G` | Move through the proposals |
-| `Enter` or `d` | Show the full diff of the selection (`n`/`p` jump between proposals) |
-| `c` | Stage and commit the selected proposal |
-| `C` or `a` | Commit all pending proposals in list order |
-| `e` | Edit the commit message in place (`Ctrl+S` saves, `Esc` cancels) |
-| `E` | Edit the commit message in `$EDITOR` |
-| `s` | Skip or unskip a proposal |
-| `J` `K` or `Alt+↓` `Alt+↑` | Move the proposal down or up |
-| `[` `]` | Scroll the detail pane |
-| `i` | Regenerate the proposals with a one-off instruction |
-| `r` | Regenerate the proposals |
-| `p` | Push the created commits (sets an upstream when needed) |
-| `m` or `Space` | Open the action menu |
-| `?` | Show all keys |
-| `Tab` `Shift+Tab` | Focus the button bar (`←` `→` choose, `Enter` runs, `Esc` leaves) |
-| `q` | Quit; a summary of the created commits is shown first |
-| `Y` (in any confirmation) | Confirm and never ask again for that action; see `confirmations.*` below |
-
-Excluded groups appear at the end of the list in yellow. They are never committed; regenerate with an instruction (`i`) if they should be.
-
-## Non-interactive use
+**`vibegit commit`** opens the review interface. Useful flags:
 
 ```bash
-vibegit commit --yolo            # apply every proposal, no interface
-vibegit commit --yolo --push     # ...and push afterwards
-vibegit commit --yolo --unstage  # unstage already staged changes without asking
-vibegit commit -i "group all test files together"
-vibegit commit --debug           # write prompts and responses to $TMPDIR/vibegit-debug
+vibegit commit -i "group all test files together"   # one-off instruction
+vibegit commit --yolo [--push] [--unstage]           # apply every proposal without the interface
+vibegit commit --debug                               # dump prompts and responses to $TMPDIR/vibegit-debug
 ```
 
-In `--yolo` mode commits run with your terminal attached, so hooks, `gpg` prompts and editors behave as with plain `git commit`.
+**`vibegit init`** analyses the last `init.commits` commits (messages and abbreviated diffs), derives the project's conventions into `.vibegitrules`, and shows the result for review before writing it. `--yes` skips the review, `--print` prints instead of writing, `--template` writes the bundled template, `-n N` changes the number of commits, `--force` replaces an existing file.
 
-## Configuration
+**`vibegit config`** runs the setup wizard; `show`, `get <path>`, `set <path> <value>`, `path` and `open` manage the file directly, for example:
 
 ```bash
-vibegit config          # setup wizard
-vibegit config show     # print the configuration (keys masked)
-vibegit config get model.name
 vibegit config set model.name openai:gpt-5.6-terra
-vibegit config set model.temperature none
-vibegit config path
-vibegit config open     # open the file in $EDITOR
-```
-
-The file lives at `~/Library/Application Support/vibegit/config.toml` on macOS, `~/.config/vibegit/config.toml` on Linux and `%LOCALAPPDATA%\vibegit\vibegit\config.toml` on Windows. `VIBEGIT_CONFIG_PATH` overrides the location. Existing configuration files from VibeGit 0.2 are read unchanged.
-
-### Models
-
-Model names use the `<provider>:<model>` format. Gemini 3.7 Flash (`google:gemini-3.8-flash`) is the default; the wizard also offers Gemini 3.5 Flash-Lite, Gemini 3.1 Pro, GPT-5.6 Terra/Sol/Luna and Grok Code Fast.
-
-| Provider | Example | API key |
-| --- | --- | --- |
-| `google` | `google:gemini-3.8-flash` | `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) |
-| `openai` | `openai:gpt-5.6-terra` | `OPENAI_API_KEY` |
-| `grok` | `grok:grok-code-fast-1` | `GROK_API_KEY` (or `XAI_API_KEY`) |
-| `anthropic` | `anthropic:claude-...` | `ANTHROPIC_API_KEY` |
-| `ollama` | `ollama:llama3` | none |
-| `groq`, `deepseek`, `cohere`, `openrouter`, `together`, `fireworks` | `groq:...` | `GROQ_API_KEY`, ... |
-
-API keys are read from the `api_keys` table in the configuration file first and from the environment second:
-
-```bash
 vibegit config set api_keys.OPENAI_API_KEY sk-...
 ```
 
-Any OpenAI-compatible server works through `base_url` (the wizard's "Custom OpenAI-compatible endpoint" option):
+## Configuration
 
-```bash
-vibegit config set model.name my-model
-vibegit config set model.base_url https://api.example.com/v1
-vibegit config set model.api_key <key>      # optional for local servers
-```
+The file lives in the platform configuration directory (`~/Library/Application Support/vibegit/config.toml` on macOS, `~/.config/vibegit/config.toml` on Linux); `VIBEGIT_CONFIG_PATH` overrides it. Files from VibeGit 0.2 are read unchanged.
 
-The legacy `google-gla:`, `google_genai:` and `xai:` prefixes are still accepted.
+Models use the `<provider>:<model>` format, with `google:gemini-3.8-flash` as the default. Keys are read from the `api_keys` table or the usual environment variables (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, `GROK_API_KEY`, `ANTHROPIC_API_KEY`, ...). Any OpenAI-compatible server works through `model.base_url` and `model.api_key`.
 
-### Options
+Other settings: `allow_excluding_changes`, `watermark`, `context_formatting.*` (branch, recent commits, line truncation, size cap), `init.*` (commits analysed and diff detail for `vibegit init`), and `confirmations.*`. Each confirmation dialog has a "don't ask again" choice that is stored there. Run `vibegit config show` to see every setting with its current value.
 
-| Path | Default | Meaning |
-| --- | --- | --- |
-| `model.name` | `google:gemini-3.8-flash` | Model in `<provider>:<model>` form |
-| `model.temperature` | unset | Sampling temperature; `none` uses the provider default |
-| `model.base_url`, `model.api_key` | unset | Custom OpenAI-compatible endpoint |
-| `allow_excluding_changes` | `true` | Let the model set unfinished changes aside |
-| `watermark` | `true` | Append "Commit generated by VibeGit" to messages |
-| `context_formatting.include_active_branch` | `true` | Send the branch name |
-| `context_formatting.include_latest_commits` | `5` | Recent messages sent as style reference |
-| `context_formatting.truncate_lines` | `240` | Cut long diff lines before sending them |
-| `context_formatting.max_file_size_kb` | `512` | Larger files are sent as a placeholder only |
-| `confirmations.commit_all`, `.push`, `.rerun`, `.quit`, `.unstage` | `true` | Ask before committing all, pushing, regenerating, quitting with pending proposals, or unstaging. Pressing `Y` in the dialog sets the flag to `false`; set it back to `true` to ask again |
-| `confirmations.derive_rules` | `true` | Offer to derive `.vibegitrules` when a repository has none |
-| `init.commits` | `20` | Recent non-merge commits analysed by `vibegit init` |
-| `init.max_files_per_commit`, `init.max_lines_per_file` | `8`, `20` | Diff detail per commit sent to the model during `init` |
-| `init.max_total_kb` | `150` | Older commits are dropped once the rendered history exceeds this size |
+## Project rules
 
-## Project rules (`.vibegitrules`)
+`.vibegitrules` in the repository root tells VibeGit how commits should look: message style, granularity, grouping, exclusions. `vibegit init` writes it from your history; edit it freely. A `-i` instruction takes priority over the file for one run.
 
-A `.vibegitrules` file in the repository root customises proposals: message style, granularity, grouping, what to exclude. The `-i` flag and the `i` key provide one-off instructions that take priority over the file.
+## Safety
 
-`vibegit init` derives the file from the repository's own history: it renders the last `init.commits` non-merge commits (messages plus abbreviated diffs, at most `init.max_files_per_commit` files and `init.max_lines_per_file` lines per file), asks the model to describe the conventions it sees, and shows the result for review before anything is written. The review screen lists the observed conventions and the proposed file; you can write it, edit it in place or in `$EDITOR`, regenerate, fall back to the bundled template, or cancel.
-
-```bash
-vibegit init               # analyse the history, review, write
-vibegit init -n 40         # analyse more commits
-vibegit init --yes         # write without the review (for scripts)
-vibegit init --print       # print the derived rules instead of writing
-vibegit init --template    # write the bundled template without analysing anything
-vibegit init --force       # replace an existing file
-```
-
-When `vibegit commit` runs in a repository without `.vibegitrules`, it offers the same derivation first (`y` derive, `n` not now, `N` never ask; the last choice is stored as `confirmations.derive_rules`). Repositories without commits get the bundled template.
-
-## What VibeGit does to your repository
-
-* The working tree is never written. Only `git apply --cached`, `git reset -- <paths>`, `git commit` and (on request) `git push` run; every commit contains exactly the bytes in your files, regardless of `apply.whitespace` or other settings.
-* An index that already contains staged changes is unstaged first, after you confirm. Intent-to-add entries count as staged.
-* A merge, rebase, cherry-pick, revert or bisect in progress, and unmerged paths, stop VibeGit before anything happens.
-* Submodule pointer updates are committed as one unit. Changes inside a submodule are reported and left alone; commit them in the submodule first.
-* Nested repositories (an untracked directory with its own `.git`) are skipped with a warning; use `git submodule add` to track them.
-* Untracked files above 50 MB are skipped with a warning; files above `max_file_size_kb` are committed as a whole but their content is not sent to the model.
-* Detached and unborn HEAD work; the first commit of a new repository can be created by VibeGit.
-
-## Troubleshooting
-
-`vibegit commit --debug` writes the prompt, the model's answer and any error to `vibegit-debug/` in your temporary directory and prints full error chains. A failed commit (for example a rejected pre-commit hook) leaves the index clean; the proposal shows the hook output and can be retried with `c`.
+* Only `git apply --cached`, `git reset -- <paths>`, `git commit` and, on request, `git push` run. The working tree is never written.
+* Staged changes are unstaged first, after confirmation. Merges, rebases, cherry-picks and conflicts stop VibeGit before anything happens.
+* Changes inside submodules and nested repositories are reported and left alone; files above 50 MB are skipped.
+* A failed commit (for example a rejected hook) leaves the index clean and can be retried.
 
 ## Development
 
 ```bash
-cargo test                          # unit tests and git edge-case scenarios
+cargo test
 cargo clippy --all-targets -- -D warnings
-cargo fmt --check
-uvx maturin build --release         # wheel in target/wheels/
-uvx --from target/wheels/*.whl vibegit --version
+uvx maturin build --release        # wheel in target/wheels/
 ```
 
-Releases are published by the `Publish to PyPI` workflow, which builds wheels for Linux (x86_64, aarch64), macOS (x86_64, arm64) and Windows on a GitHub release. The design rationale for the git layer, including every edge case covered by the test-suite, is in `docs/specs/git-layer-refactor.md`.
+Releases publish wheels for Linux, macOS and Windows through the `Publish to PyPI` workflow. The design notes for the git layer are in `docs/specs/git-layer-refactor.md`.
 
 ## License
 
-VibeGit is available under the MIT License. See [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
