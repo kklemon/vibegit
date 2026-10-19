@@ -1,52 +1,29 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
 [project]
 name = "vibegit"
-version = "0.2.2"
-description = "Automagically group and commit semantically related changes in your Git repository with AI."
+description = "Turn a busy Git working tree into focused, reviewable commits with AI."
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "click>=8.1.8",
-    "diff-parser>=1.1",
-    "gitpython>=3.1.44",
-    "inquirer>=3.4.0",
-    "platformdirs>=4.3.7",
-    "pydantic-ai-slim[google,openai]>=2.35.1",
-    "pydantic>=2.11.3",
-    "pydantic-settings>=2.9.1",
-    "python-dotenv>=1.1.0",
-    "rich>=14.0.0",
-    "toml>=0.10.2",
-    "unidiff>=0.7.5",
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dynamic = ["version"]
+keywords = ["git", "commit", "ai", "llm", "tui"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Version Control :: Git",
 ]
 
-[project.scripts]
-vibegit = "vibegit.cli:cli"
+[project.urls]
+Homepage = "https://github.com/kklemon/vibegit"
+Repository = "https://github.com/kklemon/vibegit"
 
-[build-system]
-requires = ["setuptools>=75"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-packages = ["vibegit"]
-
-[tool.setuptools.package-data]
-vibegit = ["default.vibegitrules"]
-
-[dependency-groups]
-dev = [
-    "pre-commit>=4.2.0",
-    "pytest>=8.3.5",
-    "pytest-xdist>=3.6.1",
-    "ruff>=0.11.8",
-    "ty>=0.0.75",
-    "types-requests>=2.32.0.20250328",
-    "types-toml>=0.10.8.20240310",
-]
-
-[tool.ty.src]
-include = ["vibegit"]
-
-[tool.pytest.ini_options]
-markers = [
-    "live: tests that clone external repositories and call paid model APIs",
-]
+[tool.maturin]
+# Ship the Rust binary as a console script; no Python module is involved.
+bindings = "bin"
+strip = true

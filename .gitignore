@@ -1,20 +1,23 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
+# Rust
+target/
+
+# Python packaging output (maturin)
 dist/
 wheels/
+*.whl
+__pycache__/
+*.py[oc]
 *.egg-info
-.DS_Store
+build/
 
 # Virtual environments
 .venv
 
+# Secrets and local settings
 .env*
 !.env.example
-
 .vscode
-
+.DS_Store
 *.db
 
 **/.claude/settings.local.json
