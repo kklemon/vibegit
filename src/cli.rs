@@ -138,6 +138,7 @@ fn run_commit(args: CommitArgs) -> Result<i32> {
             let label = model.label();
             (Box::new(LlmProposer::new(model)), label)
         };
+    let confirmations = config.confirmations;
     let mut workflow = Workflow::new(repo, config, proposer);
     if args.debug {
         let dir = std::env::temp_dir().join("vibegit-debug");
@@ -156,6 +157,7 @@ fn run_commit(args: CommitArgs) -> Result<i32> {
                 instruction: args.instruction.clone(),
                 model_label,
                 debug: args.debug,
+                confirmations,
             },
         )
     }

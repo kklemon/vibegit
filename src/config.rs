@@ -16,7 +16,32 @@ pub struct Config {
     pub watermark: bool,
     pub model: ModelConfig,
     pub context_formatting: ContextFormattingConfig,
+    pub confirmations: Confirmations,
     pub api_keys: BTreeMap<String, String>,
+}
+
+/// Which interface actions ask for confirmation. Pressing `Y` in a dialog
+/// turns that prompt off; `vibegit config set confirmations.<name> true` turns it back on.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Confirmations {
+    pub commit_all: bool,
+    pub push: bool,
+    pub rerun: bool,
+    pub quit: bool,
+    pub unstage: bool,
+}
+
+impl Default for Confirmations {
+    fn default() -> Self {
+        Self {
+            commit_all: true,
+            push: true,
+            rerun: true,
+            quit: true,
+            unstage: true,
+        }
+    }
 }
 
 impl Default for Config {
@@ -26,6 +51,7 @@ impl Default for Config {
             watermark: true,
             model: ModelConfig::default(),
             context_formatting: ContextFormattingConfig::default(),
+            confirmations: Confirmations::default(),
             api_keys: BTreeMap::new(),
         }
     }
@@ -225,6 +251,11 @@ impl Config {
             }
             "allow_excluding_changes" => self.allow_excluding_changes = parse_bool(path, value)?,
             "watermark" => self.watermark = parse_bool(path, value)?,
+            "confirmations.commit_all" => self.confirmations.commit_all = parse_bool(path, value)?,
+            "confirmations.push" => self.confirmations.push = parse_bool(path, value)?,
+            "confirmations.rerun" => self.confirmations.rerun = parse_bool(path, value)?,
+            "confirmations.quit" => self.confirmations.quit = parse_bool(path, value)?,
+            "confirmations.unstage" => self.confirmations.unstage = parse_bool(path, value)?,
             _ => {
                 if let Some(key) = path.strip_prefix("api_keys.") {
                     if key.is_empty() || key.contains('.') {
@@ -259,6 +290,11 @@ pub const KNOWN_PATHS: &[&str] = &[
     "context_formatting.max_file_size_kb",
     "allow_excluding_changes",
     "watermark",
+    "confirmations.commit_all",
+    "confirmations.push",
+    "confirmations.rerun",
+    "confirmations.quit",
+    "confirmations.unstage",
     "api_keys.<NAME>",
 ];
 
@@ -367,6 +403,12 @@ OPENAI_API_KEY = "sk-test-1234567890"
         assert!(config.set("nope.nope", "1").is_err());
         config.set("api_keys.GROK_API_KEY", "none").unwrap();
         assert!(config.api_keys.is_empty());
+        config.set("confirmations.push", "false").unwrap();
+        assert!(!config.confirmations.push && config.confirmations.commit_all);
+        let toml_text = config.to_toml().unwrap();
+        assert!(toml_text.contains("[confirmations]") && toml_text.contains("push = false"));
+        let back: Config = toml::from_str(&config.to_toml().unwrap()).unwrap();
+        assert_eq!(back.confirmations, config.confirmations);
     }
 
     #[test]

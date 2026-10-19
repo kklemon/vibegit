@@ -1,10 +1,12 @@
 //! Interface state and input handling. Rendering lives in `ui.rs`.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::{Position, Rect};
 use ratatui::widgets::ListState;
 use tui_textarea::TextArea;
 
 use super::worker::{ApplyItem, Cmd, Evt, ExcludedView, ProposalView, Snapshot};
+use crate::config::Confirmations;
 use crate::workflow::Leftover;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +45,26 @@ pub enum Confirm {
     Push,
     Rerun,
     QuitWithPending,
+}
+
+impl Confirm {
+    fn flag(self, confirmations: &mut Confirmations) -> &mut bool {
+        match self {
+            Confirm::CommitAll(_) => &mut confirmations.commit_all,
+            Confirm::Push => &mut confirmations.push,
+            Confirm::Rerun => &mut confirmations.rerun,
+            Confirm::QuitWithPending => &mut confirmations.quit,
+        }
+    }
+
+    pub fn config_key(self) -> &'static str {
+        match self {
+            Confirm::CommitAll(_) => "confirmations.commit_all",
+            Confirm::Push => "confirmations.push",
+            Confirm::Rerun => "confirmations.rerun",
+            Confirm::QuitWithPending => "confirmations.quit",
+        }
+    }
 }
 
 pub enum Overlay {
@@ -180,6 +202,7 @@ impl App {
         model_label: String,
         instruction: Option<String>,
         debug: bool,
+        confirmations: Confirmations,
     ) -> Self {
         Self {
             screen: Screen::Loading,
@@ -327,10 +350,7 @@ impl App {
                 self.screen = Screen::Error;
                 self.overlay = Overlay::None;
             }
-            Evt::StagedChanges(paths) => {
-                self.busy = false;
-                self.overlay = Overlay::Unstage(paths);
-            }
+            Evt::StagedChanges(paths) => self.prompt_unstage(paths),
             Evt::NoChanges { branch } => {
                 self.busy = false;
                 self.branch = branch;
@@ -463,7 +483,7 @@ impl App {
             Screen::Summary => match key.code {
                 KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => self.should_quit = true,
                 KeyCode::Char('p') if !self.busy && !self.commits.is_empty() => {
-                    self.overlay = Overlay::Confirm(Confirm::Push)
+                    self.confirm(Confirm::Push)
                 }
                 KeyCode::Char('b') if !self.busy && !self.proposals.is_empty() => {
                     self.screen = Screen::Proposals
@@ -477,10 +497,12 @@ impl App {
 
     fn on_key_unstage(&mut self, key: KeyEvent, paths: Vec<String>) {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                self.busy = true;
-                self.status = "Unstaging...".into();
-                self.effects.push(Effect::Send(Cmd::Unstage));
+            KeyCode::Char('y') | KeyCode::Enter => self.unstage(),
+            KeyCode::Char('Y') => {
+                self.confirmations.unstage = false;
+                self.effects
+                    .push(Effect::SaveConfirmations(self.confirmations));
+                self.unstage();
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -489,23 +511,59 @@ impl App {
         }
     }
 
+    fn prompt_unstage(&mut self, paths: Vec<String>) {
+        self.busy = false;
+        if self.confirmations.unstage {
+            self.overlay = Overlay::Unstage(paths);
+        } else {
+            self.unstage();
+        }
+    }
+
+    fn unstage(&mut self) {
+        self.busy = true;
+        self.status = "Unstaging...".into();
+        self.effects.push(Effect::Send(Cmd::Unstage));
+    }
+
+    /// Asks first unless the user disabled this confirmation with `Y`.
+    fn confirm(&mut self, kind: Confirm) {
+        if *kind.flag(&mut self.confirmations) {
+            self.overlay = Overlay::Confirm(kind);
+        } else {
+            self.execute(kind);
+        }
+    }
+
+    fn execute(&mut self, kind: Confirm) {
+        match kind {
+            Confirm::CommitAll(_) => self.commit_all(),
+            Confirm::Push => {
+                self.busy = true;
+                self.status = "Pushing...".into();
+                self.effects.push(Effect::Send(Cmd::Push));
+            }
+            Confirm::Rerun => self.regenerate(),
+            Confirm::QuitWithPending => self.screen = Screen::Summary,
+        }
+    }
     fn on_key_confirm(&mut self, key: KeyEvent, kind: Confirm) {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => match kind {
-                Confirm::CommitAll(_) => self.commit_all(),
-                Confirm::Push => {
-                    self.busy = true;
-                    self.status = "Pushing...".into();
-                    self.effects.push(Effect::Send(Cmd::Push));
-                }
-                Confirm::Rerun => self.regenerate(),
-                Confirm::QuitWithPending => self.screen = Screen::Summary,
-            },
+            KeyCode::Char('y') | KeyCode::Enter => self.execute(kind),
+            KeyCode::Char('Y') => {
+                *kind.flag(&mut self.confirmations) = false;
+                self.effects
+                    .push(Effect::SaveConfirmations(self.confirmations));
+                self.execute(kind);
+                self.status = format!(
+                    "Won't ask again. Re-enable with: vibegit config set {} true",
+                    kind.config_key()
+                );
+            }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {}
             _ => self.overlay = Overlay::Confirm(kind),
         }
     }
-
     fn on_key_edit_message(&mut self, key: KeyEvent, index: usize, mut editor: TextArea<'static>) {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
@@ -664,7 +722,7 @@ impl App {
                 if pending == 0 {
                     self.status = "Nothing pending to commit.".into();
                 } else {
-                    self.overlay = Overlay::Confirm(Confirm::CommitAll(pending));
+                    self.confirm(Confirm::CommitAll(pending));
                 }
             }
             Action::Edit => {
@@ -737,18 +795,18 @@ impl App {
                 editor.move_cursor(tui_textarea::CursorMove::End);
                 self.overlay = Overlay::Instruction(editor);
             }
-            Action::Rerun => self.overlay = Overlay::Confirm(Confirm::Rerun),
+            Action::Rerun => self.confirm(Confirm::Rerun),
             Action::Push => {
                 if self.commits.is_empty() {
                     self.status = "Nothing to push yet.".into();
                 } else {
-                    self.overlay = Overlay::Confirm(Confirm::Push);
+                    self.confirm(Confirm::Push);
                 }
             }
             Action::Help => self.overlay = Overlay::Help,
             Action::Quit => {
                 if self.pending_count() > 0 && !self.commits.is_empty() {
-                    self.overlay = Overlay::Confirm(Confirm::QuitWithPending);
+                    self.confirm(Confirm::QuitWithPending);
                 } else if !self.commits.is_empty() {
                     self.screen = Screen::Summary;
                 } else {

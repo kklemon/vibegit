@@ -38,6 +38,7 @@ pub struct Options {
     pub instruction: Option<String>,
     pub model_label: String,
     pub debug: bool,
+    pub confirmations: Confirmations,
 }
 
 const TICK: Duration = Duration::from_millis(60);
@@ -105,6 +106,11 @@ fn event_loop(
                 Effect::Send(cmd) => {
                     cmd_tx.send(cmd).ok();
                 }
+                Effect::SaveConfirmations(confirmations) => {
+                    if let Err(err) = save_confirmations(confirmations) {
+                        app.status = format!("could not save the preference: {err:#}");
+                    }
+                }
                 Effect::ExternalEdit { index, message } => {
                     let edited = suspend(terminal, || edit_in_external_editor(&message))?;
                     match edited {
@@ -120,12 +126,19 @@ fn event_loop(
     }
 }
 
+/// Persists the "don't ask again" choice without touching other settings.
+fn save_confirmations(confirmations: Confirmations) -> Result<()> {
+    let (mut config, _) = Config::load()?;
+    config.confirmations = confirmations;
+    config.save()
+}
+
 /// Leaves the alternate screen and raw mode while `f` runs (editors, hooks).
 fn suspend<T>(terminal: &mut DefaultTerminal, f: impl FnOnce() -> T) -> Result<T> {
     disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen)?;
+    execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen)?;
     let result = f();
-    execute!(io::stdout(), EnterAlternateScreen)?;
+    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     enable_raw_mode()?;
     terminal.clear()?;
     Ok(result)
