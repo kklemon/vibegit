@@ -1,14 +1,15 @@
 //! Render smoke tests: every screen and overlay must draw without panicking,
 //! including on very small terminals.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
 
-use super::app::{App, Overlay, Screen};
+use super::app::{App, Confirm, Effect, Overlay, Screen};
 use super::ui;
 use super::worker::{Evt, ExcludedView, ProposalView, Snapshot};
 use crate::changes::FileSummary;
+use crate::config::Confirmations;
 use crate::git::FileKind;
 use crate::workflow::Leftover;
 

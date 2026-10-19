@@ -155,6 +155,27 @@ impl Action {
 pub enum Effect {
     Send(Cmd),
     ExternalEdit { index: usize, message: String },
+    SaveConfirmations(Confirmations),
+}
+
+/// A focusable, clickable action in the bottom bar. Activating it sends its shortcut key.
+#[derive(Debug, Clone, Copy)]
+pub struct Button {
+    pub label: &'static str,
+    pub key_label: &'static str,
+    pub code: KeyCode,
+    pub modifiers: KeyModifiers,
+    pub enabled: bool,
+}
+
+fn button(label: &'static str, key_label: &'static str, code: KeyCode, enabled: bool) -> Button {
+    Button {
+        label,
+        key_label,
+        code,
+        modifiers: KeyModifiers::NONE,
+        enabled,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -191,6 +212,14 @@ pub struct App {
     pub apply_log: Vec<String>,
     pub menu_index: usize,
     pub debug: bool,
+    pub confirmations: Confirmations,
+    /// Index into `buttons()` when the button bar has keyboard focus.
+    pub focus: Option<usize>,
+    /// Screen rectangles of the buttons drawn last, for mouse hit testing.
+    pub button_rects: Vec<(Rect, usize)>,
+    pub list_rect: Rect,
+    pub detail_rect: Rect,
+    pub diff_rect: Rect,
     pub should_quit: bool,
     pub exit_code: i32,
     effects: Vec<Effect>,
@@ -232,6 +261,12 @@ impl App {
             apply_log: Vec::new(),
             menu_index: 0,
             debug,
+            confirmations,
+            focus: None,
+            button_rects: Vec::new(),
+            list_rect: Rect::default(),
+            detail_rect: Rect::default(),
+            diff_rect: Rect::default(),
             should_quit: false,
             exit_code: 0,
             effects: Vec::new(),
@@ -452,6 +487,9 @@ impl App {
             self.should_quit = true;
             return;
         }
+        if self.handle_button_focus(key) {
+            return;
+        }
         match std::mem::replace(&mut self.overlay, Overlay::None) {
             Overlay::None => {}
             Overlay::Unstage(paths) => return self.on_key_unstage(key, paths),
@@ -633,12 +671,12 @@ impl App {
             KeyCode::PageUp => self.diff_scroll = self.diff_scroll.saturating_sub(20),
             KeyCode::Home | KeyCode::Char('g') => self.diff_scroll = 0,
             KeyCode::End | KeyCode::Char('G') => self.diff_scroll = u16::MAX / 2,
-            KeyCode::Tab | KeyCode::Char('n') => {
+            KeyCode::Char('n') => {
                 self.move_selection(1);
                 self.diff_row = self.selected_row();
                 self.diff_scroll = 0;
             }
-            KeyCode::BackTab | KeyCode::Char('N') | KeyCode::Char('p') => {
+            KeyCode::Char('N') | KeyCode::Char('p') => {
                 self.move_selection(-1);
                 self.diff_row = self.selected_row();
                 self.diff_scroll = 0;
@@ -651,7 +689,6 @@ impl App {
     }
 
     fn on_key_proposals(&mut self, key: KeyEvent) {
-        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         match key.code {
             KeyCode::Down if alt => self.run_action(Action::MoveDown),
@@ -681,8 +718,256 @@ impl App {
             }
             KeyCode::Char('?') | KeyCode::F(1) => self.run_action(Action::Help),
             KeyCode::Char('q') | KeyCode::Esc => self.run_action(Action::Quit),
-            KeyCode::Tab if shift => self.move_selection(-1),
-            KeyCode::Tab => self.move_selection(1),
+            _ => {}
+        }
+    }
+
+    // --- button bar ---------------------------------------------------------------
+
+    /// The buttons shown in the bottom bar for the current screen or overlay.
+    pub fn buttons(&self) -> Vec<Button> {
+        use KeyCode::{Char, Enter, Esc};
+        let yes_no = |third: &'static str| {
+            vec![
+                button("Yes", "y", Char('y'), true),
+                button("Yes, don't ask again", "Y", Char('Y'), true),
+                button(third, "n", Char('n'), true),
+            ]
+        };
+        match &self.overlay {
+            Overlay::Unstage(_) => return yes_no("Quit"),
+            Overlay::Confirm(_) => return yes_no("No"),
+            Overlay::EditMessage { .. } => {
+                return vec![
+                    Button {
+                        label: "Save",
+                        key_label: "Ctrl+S",
+                        code: Char('s'),
+                        modifiers: KeyModifiers::CONTROL,
+                        enabled: true,
+                    },
+                    button("Cancel", "Esc", Esc, true),
+                ]
+            }
+            Overlay::Instruction(_) => {
+                return vec![
+                    button("Regenerate", "Enter", Enter, true),
+                    button("Cancel", "Esc", Esc, true),
+                ]
+            }
+            Overlay::Menu => {
+                return vec![
+                    button("Run", "Enter", Enter, true),
+                    button("Close", "Esc", Esc, true),
+                ]
+            }
+            Overlay::Help => return vec![button("Close", "Esc", Esc, true)],
+            Overlay::Applying => return Vec::new(),
+            Overlay::None => {}
+        }
+        match self.screen {
+            Screen::Loading => vec![button("Quit", "q", Char('q'), true)],
+            Screen::Error => vec![button("Exit", "Enter", Enter, true)],
+            Screen::Summary => vec![
+                button(
+                    "Push",
+                    "p",
+                    Char('p'),
+                    !self.busy && !self.commits.is_empty(),
+                ),
+                button(
+                    "Back to proposals",
+                    "b",
+                    Char('b'),
+                    !self.busy && !self.proposals.is_empty(),
+                ),
+                button("Quit", "q", Char('q'), true),
+            ],
+            Screen::Diff => {
+                let (editable, committable) = self.selected_capabilities();
+                vec![
+                    button("Back", "q", Char('q'), true),
+                    button("Previous", "p", Char('p'), self.selected > 0),
+                    button(
+                        "Next",
+                        "n",
+                        Char('n'),
+                        self.selected + 1 < self.rows().len(),
+                    ),
+                    button("Edit", "e", Char('e'), !self.busy && editable),
+                    button("Commit", "c", Char('c'), !self.busy && committable),
+                ]
+            }
+            Screen::Proposals => {
+                let (editable, committable) = self.selected_capabilities();
+                let busy = self.busy;
+                let is_proposal = matches!(self.selected_row(), Some(Row::Proposal(_)));
+                vec![
+                    button("Commit", "c", Char('c'), !busy && committable),
+                    button(
+                        "Commit all",
+                        "C",
+                        Char('C'),
+                        !busy && self.pending_count() > 0,
+                    ),
+                    button("Edit", "e", Char('e'), !busy && editable),
+                    button("Diff", "d", Char('d'), self.selected_row().is_some()),
+                    button("Skip", "s", Char('s'), !busy && is_proposal),
+                    button("Instruct", "i", Char('i'), !busy),
+                    button("Regenerate", "r", Char('r'), !busy),
+                    button("Push", "p", Char('p'), !busy && !self.commits.is_empty()),
+                    button("Help", "?", Char('?'), true),
+                    button("Quit", "q", Char('q'), true),
+                ]
+            }
+        }
+    }
+
+    /// `(editable, committable)` for the selected row.
+    fn selected_capabilities(&self) -> (bool, bool) {
+        match self.selected_row() {
+            Some(Row::Proposal(i)) => match self.proposals[i].status {
+                ProposalStatus::Pending | ProposalStatus::Failed(_) => (true, true),
+                _ => (false, false),
+            },
+            _ => (false, false),
+        }
+    }
+
+    fn editor_overlay_active(&self) -> bool {
+        matches!(
+            self.overlay,
+            Overlay::EditMessage { .. } | Overlay::Instruction(_)
+        )
+    }
+
+    /// Tab moves keyboard focus into the button bar. Returns true when the key was consumed.
+    fn handle_button_focus(&mut self, key: KeyEvent) -> bool {
+        if self.editor_overlay_active() {
+            return false;
+        }
+        let buttons = self.buttons();
+        let enabled: Vec<usize> = buttons
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.enabled)
+            .map(|(i, _)| i)
+            .collect();
+        let Some(current) = self.focus else {
+            return match key.code {
+                KeyCode::Tab if !enabled.is_empty() => {
+                    self.focus = enabled.first().copied();
+                    true
+                }
+                KeyCode::BackTab if !enabled.is_empty() => {
+                    self.focus = enabled.last().copied();
+                    true
+                }
+                _ => false,
+            };
+        };
+        let pos = enabled.iter().position(|&i| i == current);
+        match key.code {
+            KeyCode::Tab => {
+                self.focus = pos.and_then(|p| enabled.get(p + 1).copied());
+                true
+            }
+            KeyCode::BackTab => {
+                self.focus = pos
+                    .and_then(|p| p.checked_sub(1))
+                    .and_then(|p| enabled.get(p).copied());
+                true
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                if let Some(p) = pos {
+                    self.focus = Some(enabled[(p + 1) % enabled.len()]);
+                }
+                true
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                if let Some(p) = pos {
+                    self.focus = Some(enabled[(p + enabled.len() - 1) % enabled.len()]);
+                }
+                true
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                self.activate_button(current);
+                true
+            }
+            KeyCode::Esc | KeyCode::Up => {
+                self.focus = None;
+                true
+            }
+            _ => {
+                // A shortcut was typed: let it through and release the focus.
+                self.focus = None;
+                false
+            }
+        }
+    }
+
+    /// Runs the button's shortcut as if the key had been pressed.
+    pub fn activate_button(&mut self, index: usize) {
+        let buttons = self.buttons();
+        let Some(b) = buttons.get(index).copied() else {
+            return;
+        };
+        if !b.enabled {
+            self.status = format!("{} is not available right now.", b.label);
+            return;
+        }
+        let focused = self.focus.take();
+        self.on_key(KeyEvent::new(b.code, b.modifiers));
+        if focused.is_some() {
+            let count = self.buttons().len();
+            self.focus = (count > 0).then(|| index.min(count - 1));
+        }
+    }
+
+    pub fn on_mouse(&mut self, mouse: MouseEvent) {
+        let at = Position::new(mouse.column, mouse.row);
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some((_, index)) = self
+                    .button_rects
+                    .iter()
+                    .find(|(r, _)| r.contains(at))
+                    .copied()
+                {
+                    self.activate_button(index);
+                } else if matches!(self.overlay, Overlay::None)
+                    && self.screen == Screen::Proposals
+                    && self.list_rect.contains(at)
+                {
+                    let row = (mouse.row - self.list_rect.y) as usize;
+                    if row >= 1 {
+                        let index = self.list_state.offset() + row - 1;
+                        if index < self.rows().len() {
+                            self.select(index);
+                        }
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                if !matches!(self.overlay, Overlay::None) {
+                    return;
+                }
+                let delta: i32 = if mouse.kind == MouseEventKind::ScrollDown {
+                    3
+                } else {
+                    -3
+                };
+                match self.screen {
+                    Screen::Diff => {
+                        self.diff_scroll = (i32::from(self.diff_scroll) + delta).max(0) as u16
+                    }
+                    Screen::Proposals if self.detail_rect.contains(at) => {
+                        self.detail_scroll = (i32::from(self.detail_scroll) + delta).max(0) as u16
+                    }
+                    Screen::Proposals => self.move_selection(delta.signum()),
+                    _ => {}
+                }
+            }
             _ => {}
         }
     }

@@ -17,14 +17,14 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::DefaultTerminal;
 
-use crate::config::Config;
+use crate::config::{Config, Confirmations};
 use crate::update::spawn_update_check;
 use crate::workflow::Workflow;
 use crate::VERSION;
@@ -59,11 +59,14 @@ pub fn run_commit(workflow: Workflow, options: Options) -> Result<i32> {
         options.model_label,
         options.instruction,
         options.debug,
+        options.confirmations,
     );
     cmd_tx.send(Cmd::Begin).ok();
 
     let mut terminal = ratatui::init();
+    let _ = execute!(io::stdout(), EnableMouseCapture);
     let result = event_loop(&mut terminal, &mut app, &cmd_tx, &evt_rx, &update_rx);
+    let _ = execute!(io::stdout(), DisableMouseCapture);
     ratatui::restore();
     cmd_tx.send(Cmd::Quit).ok();
     let code = result?;
@@ -87,6 +90,7 @@ fn event_loop(
         if event::poll(TICK)? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
+                Event::Mouse(mouse) => app.on_mouse(mouse),
                 _ => {}
             }
         }

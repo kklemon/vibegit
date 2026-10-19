@@ -3,18 +3,21 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-use super::app::{Action, App, Confirm, Overlay, ProposalStatus, Row, Screen};
+use super::app::{Action, App, Button, Confirm, Overlay, ProposalStatus, Row, Screen};
 use super::widgets::{
-    centered_fixed, centered_rect, diff_lines, first_line, hint_line, shorten_path, spinner_frame,
+    centered_fixed, centered_rect, diff_lines, first_line, shorten_path, spinner_frame,
     status_symbol,
 };
 
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
+    let buttons = app.buttons();
+    let rows = button_rows(&buttons, area.width);
+    let footer_height = 1 + rows.len().max(1) as u16;
     let [header, body, footer] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(3),
-        Constraint::Length(2),
+        Constraint::Length(footer_height),
     ])
     .areas(area);
     render_header(frame, app, header);
@@ -25,7 +28,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         Screen::Summary => render_summary(frame, app, body),
         Screen::Error => render_error(frame, app, body),
     }
-    render_footer(frame, app, footer);
+    render_footer(frame, app, footer, &buttons, &rows);
     render_overlay(frame, app, area);
 }
 
@@ -65,9 +68,71 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let [status_area, hints_area] =
-        Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
+fn button_width(b: &Button) -> u16 {
+    (b.key_label.chars().count() + b.label.chars().count() + 3) as u16
+}
+
+/// Greedy line wrapping of the buttons for the available width.
+fn button_rows(buttons: &[Button], width: u16) -> Vec<Vec<usize>> {
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut current: Vec<usize> = Vec::new();
+    let mut used: u16 = 0;
+    for (i, b) in buttons.iter().enumerate() {
+        let w = button_width(b);
+        let needed = if current.is_empty() { w } else { used + 1 + w };
+        if !current.is_empty() && needed > width {
+            rows.push(std::mem::take(&mut current));
+            used = 0;
+        }
+        used = if current.is_empty() { w } else { used + 1 + w };
+        current.push(i);
+    }
+    if !current.is_empty() {
+        rows.push(current);
+    }
+    rows
+}
+
+fn button_spans(b: &Button, focused: bool) -> Vec<Span<'static>> {
+    let key = format!(" {} ", b.key_label);
+    let label = format!("{} ", b.label);
+    let (key_style, label_style) = if !b.enabled {
+        (
+            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Color::DarkGray),
+        )
+    } else if focused {
+        (
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Black).bg(Color::Cyan),
+        )
+    } else {
+        (
+            Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::White).bg(Color::DarkGray),
+        )
+    };
+    vec![
+        Span::styled(key, key_style),
+        Span::styled(label, label_style),
+    ]
+}
+
+fn render_footer(
+    frame: &mut Frame,
+    app: &mut App,
+    area: Rect,
+    buttons: &[Button],
+    rows: &[Vec<usize>],
+) {
+    let [status_area, bar_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
     let mut status = Vec::new();
     if app.busy {
         status.push(Span::styled(
@@ -78,38 +143,42 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     status.push(Span::raw(app.status.clone()));
     frame.render_widget(Paragraph::new(Line::from(status)), status_area);
 
-    let hints: Vec<(&str, &str)> = match (&app.overlay, app.screen) {
-        (Overlay::EditMessage { .. }, _) => vec![("Ctrl+S", "save"), ("Esc", "cancel")],
-        (Overlay::Instruction(_), _) => vec![("Enter", "regenerate"), ("Esc", "cancel")],
-        (Overlay::Menu, _) => vec![("↑↓", "choose"), ("Enter", "run"), ("Esc", "close")],
-        (Overlay::Help, _) => vec![("any key", "close")],
-        (Overlay::Confirm(_), _) | (Overlay::Unstage(_), _) => vec![("y", "yes"), ("n", "no")],
-        (Overlay::Applying, _) => vec![("", "committing, please wait")],
-        (_, Screen::Loading) => vec![("q", "quit")],
-        (_, Screen::Error) => vec![("any key", "exit")],
-        (_, Screen::Summary) => vec![("p", "push"), ("b", "back to proposals"), ("q", "quit")],
-        (_, Screen::Diff) => vec![
-            ("↑↓ PgUp PgDn", "scroll"),
-            ("n/p", "next/prev"),
-            ("e", "edit"),
-            ("c", "commit"),
-            ("q", "back"),
-        ],
-        (_, Screen::Proposals) => vec![
-            ("↑↓", "select"),
-            ("c", "commit"),
-            ("C", "all"),
-            ("e", "edit"),
-            ("d", "diff"),
-            ("s", "skip"),
-            ("J/K", "move"),
-            ("i", "instruct"),
-            ("m", "menu"),
-            ("?", "help"),
-            ("q", "quit"),
-        ],
-    };
-    frame.render_widget(Paragraph::new(hint_line(&hints)), hints_area);
+    app.button_rects.clear();
+    if rows.is_empty() {
+        let text = if matches!(app.overlay, Overlay::Applying) {
+            "committing, please wait"
+        } else {
+            ""
+        };
+        frame.render_widget(
+            Paragraph::new(Span::styled(text, Style::default().fg(Color::DarkGray))),
+            bar_area,
+        );
+        return;
+    }
+    for (r, row) in rows.iter().enumerate() {
+        let y = bar_area.y + r as u16;
+        if y >= bar_area.y + bar_area.height {
+            break;
+        }
+        let mut spans = Vec::new();
+        let mut x = bar_area.x;
+        for (n, &i) in row.iter().enumerate() {
+            if n > 0 {
+                spans.push(Span::raw(" "));
+                x += 1;
+            }
+            let b = &buttons[i];
+            let w = button_width(b);
+            spans.extend(button_spans(b, app.focus == Some(i)));
+            app.button_rects.push((Rect::new(x, y, w, 1), i));
+            x += w;
+        }
+        frame.render_widget(
+            Paragraph::new(Line::from(spans)),
+            Rect::new(bar_area.x, y, bar_area.width, 1),
+        );
+    }
 }
 
 fn render_loading(frame: &mut Frame, app: &App, area: Rect) {
@@ -152,6 +221,8 @@ fn render_loading(frame: &mut Frame, app: &App, area: Rect) {
 fn render_proposals(frame: &mut Frame, app: &mut App, area: Rect) {
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).areas(area);
+    app.list_rect = left;
+    app.detail_rect = right;
 
     let rows = app.rows();
     let items: Vec<ListItem> = rows
@@ -339,6 +410,7 @@ fn file_lines(files: &[crate::changes::FileSummary]) -> Vec<Line<'static>> {
 }
 
 fn render_diff(frame: &mut Frame, app: &mut App, area: Rect) {
+    app.diff_rect = area;
     let (text, subject) = match app.diff_text() {
         Some((t, s)) => (t.to_string(), s),
         None => (String::new(), String::new()),
@@ -466,7 +538,10 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
             }
             lines.push(Line::from(""));
             lines.push(Line::from(
-                "Unstage them now? Your working tree is not touched.  [y/n]",
+                "Unstage them now? Your working tree is not touched.",
+            ));
+            lines.push(Line::from(
+                "  [y] yes   [Y] yes, don't ask again   [n] quit",
             ));
             modal(
                 frame,
@@ -475,7 +550,7 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 lines,
                 Color::Yellow,
                 80,
-                (paths.len().min(12) + 6) as u16,
+                (paths.len().min(12) + 7) as u16,
             );
         }
         Overlay::Confirm(kind) => {
@@ -495,9 +570,9 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 Line::from(""),
                 Line::from(format!("  {question}")),
                 Line::from(""),
-                Line::from("  [y] yes   [n] no"),
+                Line::from("  [y] yes   [Y] yes, don't ask again   [n] no"),
             ];
-            modal(frame, area, " Confirm ", lines, Color::Cyan, 70, 6);
+            modal(frame, area, " Confirm ", lines, Color::Cyan, 76, 6);
         }
         Overlay::EditMessage { editor, .. } => {
             let rect = centered_rect(80, 60, area);
@@ -556,6 +631,11 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 ("r", "regenerate proposals"),
                 ("p", "push the created commits"),
                 ("m / Space", "open the action menu"),
+                (
+                    "Tab / Shift+Tab",
+                    "focus the button bar; ← → choose, Enter runs",
+                ),
+                ("mouse", "click buttons or proposals; wheel scrolls"),
                 ("q / Esc", "quit (summary first when commits exist)"),
                 ("Ctrl+C", "abort immediately"),
             ];
