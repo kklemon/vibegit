@@ -6,16 +6,36 @@ use ratatui::widgets::ListState;
 use tui_textarea::TextArea;
 
 use super::worker::{ApplyItem, Cmd, Evt, ExcludedView, ProposalView, Snapshot};
+use std::path::PathBuf;
+
 use crate::config::Confirmations;
 use crate::workflow::Leftover;
+use crate::DEFAULT_RULES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Loading,
     Proposals,
     Diff,
+    /// Review of a derived `.vibegitrules` before it is written.
+    Rules,
     Summary,
     Error,
+}
+
+/// What the interface was started for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Commit,
+    /// `vibegit init`: derive the rules, review, write, quit.
+    Init,
+}
+
+pub struct RulesReview {
+    pub observations: Vec<String>,
+    pub rules: String,
+    pub editor: Option<TextArea<'static>>,
+    pub scroll: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +90,8 @@ impl Confirm {
 pub enum Overlay {
     None,
     Unstage(Vec<String>),
+    /// Offer to derive `.vibegitrules` from this many commits.
+    DeriveRules(usize),
     Confirm(Confirm),
     EditMessage {
         index: usize,
@@ -155,6 +177,7 @@ impl Action {
 pub enum Effect {
     Send(Cmd),
     ExternalEdit { index: usize, message: String },
+    ExternalEditRules(String),
     SaveConfirmations(Confirmations),
 }
 
@@ -213,6 +236,10 @@ pub struct App {
     pub menu_index: usize,
     pub debug: bool,
     pub confirmations: Confirmations,
+    pub mode: Mode,
+    pub rules: Option<RulesReview>,
+    pub rules_target: String,
+    pub rules_written: Option<PathBuf>,
     /// Index into `buttons()` when the button bar has keyboard focus.
     pub focus: Option<usize>,
     /// Screen rectangles of the buttons drawn last, for mouse hit testing.
@@ -233,6 +260,7 @@ impl App {
         debug: bool,
         confirmations: Confirmations,
     ) -> Self {
+        let rules_target = format!("{repo_label}/.vibegitrules");
         Self {
             screen: Screen::Loading,
             overlay: Overlay::None,
@@ -262,6 +290,10 @@ impl App {
             menu_index: 0,
             debug,
             confirmations,
+            mode: Mode::Commit,
+            rules: None,
+            rules_target,
+            rules_written: None,
             focus: None,
             button_rects: Vec::new(),
             list_rect: Rect::default(),
@@ -286,6 +318,11 @@ impl App {
         let mut lines = Vec::new();
         if let Some(err) = &self.error {
             lines.push(format!("error: {err}"));
+        }
+        if let Some(path) = &self.rules_written {
+            lines.push(format!("Wrote {}", path.display()));
+        } else if self.mode == Mode::Init && self.error.is_none() {
+            lines.push("No .vibegitrules written.".to_string());
         }
         if !self.commits.is_empty() {
             lines.push(format!("VibeGit created {} commit(s):", self.commits.len()));
@@ -386,6 +423,53 @@ impl App {
                 self.overlay = Overlay::None;
             }
             Evt::StagedChanges(paths) => self.prompt_unstage(paths),
+            Evt::NoRules { commits } => {
+                self.busy = false;
+                self.overlay = Overlay::DeriveRules(commits);
+            }
+            Evt::RulesDerived(derived) => {
+                self.busy = false;
+                self.overlay = Overlay::None;
+                self.rules = Some(RulesReview {
+                    observations: derived.observations,
+                    rules: derived.rules,
+                    editor: None,
+                    scroll: 0,
+                });
+                self.screen = Screen::Rules;
+                self.status = format!(
+                    "Review the proposed rules; Enter writes {}",
+                    self.rules_target
+                );
+            }
+            Evt::RulesFailed(message) => match self.mode {
+                Mode::Init => {
+                    self.busy = false;
+                    self.error = Some(message);
+                    self.screen = Screen::Error;
+                }
+                Mode::Commit => {
+                    self.status =
+                        format!("Could not derive rules ({message}); continuing without.");
+                    self.busy = true;
+                    self.screen = Screen::Loading;
+                    self.effects.push(Effect::Send(Cmd::SkipRules));
+                }
+            },
+            Evt::RulesWritten(path) => {
+                self.rules_written = Some(path.clone());
+                match self.mode {
+                    Mode::Init => {
+                        self.busy = false;
+                        self.should_quit = true;
+                    }
+                    Mode::Commit => {
+                        self.status = format!("Wrote {}. Generating proposals...", path.display());
+                        self.busy = true;
+                        self.screen = Screen::Loading;
+                    }
+                }
+            }
             Evt::NoChanges { branch } => {
                 self.busy = false;
                 self.branch = branch;
@@ -493,6 +577,7 @@ impl App {
         match std::mem::replace(&mut self.overlay, Overlay::None) {
             Overlay::None => {}
             Overlay::Unstage(paths) => return self.on_key_unstage(key, paths),
+            Overlay::DeriveRules(commits) => return self.on_key_derive_rules(key, commits),
             Overlay::Confirm(kind) => return self.on_key_confirm(key, kind),
             Overlay::EditMessage { index, editor } => {
                 return self.on_key_edit_message(key, index, editor)
@@ -529,6 +614,7 @@ impl App {
                 _ => {}
             },
             Screen::Diff => self.on_key_diff(key),
+            Screen::Rules => self.on_key_rules(key),
             Screen::Proposals => self.on_key_proposals(key),
         }
     }
@@ -736,6 +822,13 @@ impl App {
         };
         match &self.overlay {
             Overlay::Unstage(_) => return yes_no("Quit"),
+            Overlay::DeriveRules(_) => {
+                return vec![
+                    button("Yes, derive rules", "y", Char('y'), true),
+                    button("Not now", "n", Char('n'), true),
+                    button("Never ask", "N", Char('N'), true),
+                ]
+            }
             Overlay::Confirm(_) => return yes_no("No"),
             Overlay::EditMessage { .. } => {
                 return vec![
@@ -767,6 +860,34 @@ impl App {
         }
         match self.screen {
             Screen::Loading => vec![button("Quit", "q", Char('q'), true)],
+            Screen::Rules => {
+                if self.rules_editing() {
+                    return vec![
+                        Button {
+                            label: "Apply",
+                            key_label: "Ctrl+S",
+                            code: Char('s'),
+                            modifiers: KeyModifiers::CONTROL,
+                            enabled: true,
+                        },
+                        button("Cancel edit", "Esc", Esc, true),
+                    ];
+                }
+                let mut out = vec![
+                    button("Write .vibegitrules", "Enter", Enter, !self.busy),
+                    button("Edit", "e", Char('e'), !self.busy),
+                    button("Edit in $EDITOR", "E", Char('E'), !self.busy),
+                    button("Regenerate", "r", Char('r'), !self.busy),
+                ];
+                match self.mode {
+                    Mode::Init => {
+                        out.push(button("Use template", "t", Char('t'), !self.busy));
+                        out.push(button("Cancel", "q", Char('q'), true));
+                    }
+                    Mode::Commit => out.push(button("Skip", "s", Char('s'), !self.busy)),
+                }
+                out
+            }
             Screen::Error => vec![button("Exit", "Enter", Enter, true)],
             Screen::Summary => vec![
                 button(
@@ -838,7 +959,13 @@ impl App {
         matches!(
             self.overlay,
             Overlay::EditMessage { .. } | Overlay::Instruction(_)
-        )
+        ) || self.rules_editing()
+    }
+
+    fn rules_editing(&self) -> bool {
+        self.screen == Screen::Rules
+            && matches!(self.overlay, Overlay::None)
+            && self.rules.as_ref().is_some_and(|r| r.editor.is_some())
     }
 
     /// Tab moves keyboard focus into the button bar. Returns true when the key was consumed.
@@ -968,6 +1095,121 @@ impl App {
                     _ => {}
                 }
             }
+            _ => {}
+        }
+    }
+
+    fn on_key_derive_rules(&mut self, key: KeyEvent, commits: usize) {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Enter => self.start_derivation(),
+            KeyCode::Char('n') | KeyCode::Esc => self.skip_rules(),
+            KeyCode::Char('N') => {
+                self.confirmations.derive_rules = false;
+                self.effects
+                    .push(Effect::SaveConfirmations(self.confirmations));
+                self.skip_rules();
+            }
+            KeyCode::Char('q') => self.should_quit = true,
+            _ => self.overlay = Overlay::DeriveRules(commits),
+        }
+    }
+
+    fn start_derivation(&mut self) {
+        self.busy = true;
+        self.overlay = Overlay::None;
+        self.screen = Screen::Loading;
+        self.status = "Analyzing the commit history...".into();
+        self.effects.push(Effect::Send(Cmd::DeriveRules));
+    }
+
+    fn skip_rules(&mut self) {
+        self.busy = true;
+        self.overlay = Overlay::None;
+        self.screen = Screen::Loading;
+        self.status = "Continuing without project rules...".into();
+        self.effects.push(Effect::Send(Cmd::SkipRules));
+    }
+
+    fn write_rules(&mut self) {
+        let Some(text) = self.rules.as_ref().map(|r| r.rules.clone()) else {
+            return;
+        };
+        if text.trim().is_empty() {
+            self.status = "The rules are empty; nothing written.".into();
+            return;
+        }
+        self.busy = true;
+        self.status = format!("Writing {}...", self.rules_target);
+        self.effects.push(Effect::Send(Cmd::WriteRules {
+            text,
+            then_generate: self.mode == Mode::Commit,
+        }));
+    }
+
+    /// Replaces the proposed rules text (after an external edit).
+    pub fn set_rules_text(&mut self, text: String) {
+        if let Some(review) = self.rules.as_mut() {
+            if !text.trim().is_empty() {
+                review.rules = text.trim_end().to_string();
+                review.scroll = 0;
+                self.status = "Rules updated.".into();
+            }
+        }
+    }
+
+    fn on_key_rules(&mut self, key: KeyEvent) {
+        let Some(review) = self.rules.as_mut() else {
+            return;
+        };
+        if let Some(editor) = review.editor.as_mut() {
+            let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+            match key.code {
+                KeyCode::Esc => review.editor = None,
+                KeyCode::Char('s') if ctrl => {
+                    let text = editor.lines().join("\n");
+                    review.editor = None;
+                    self.set_rules_text(text);
+                }
+                _ => {
+                    editor.input(key);
+                }
+            }
+            return;
+        }
+        if self.busy {
+            return;
+        }
+        match key.code {
+            KeyCode::Enter => self.write_rules(),
+            KeyCode::Char('e') => {
+                let lines: Vec<String> = review.rules.lines().map(String::from).collect();
+                let mut editor = TextArea::new(lines);
+                editor.set_cursor_line_style(ratatui::style::Style::default());
+                review.editor = Some(editor);
+            }
+            KeyCode::Char('E') => {
+                let text = review.rules.clone();
+                self.effects.push(Effect::ExternalEditRules(text));
+            }
+            KeyCode::Char('r') => self.start_derivation(),
+            KeyCode::Char('t') if self.mode == Mode::Init => {
+                review.rules = DEFAULT_RULES.trim_end().to_string();
+                review.observations = vec!["VibeGit's default template.".to_string()];
+                review.scroll = 0;
+                self.status = "Template loaded; Enter writes it.".into();
+            }
+            KeyCode::Char('s') if self.mode == Mode::Commit => self.skip_rules(),
+            KeyCode::Char('q') | KeyCode::Esc => match self.mode {
+                Mode::Init => self.should_quit = true,
+                Mode::Commit => self.skip_rules(),
+            },
+            KeyCode::Down | KeyCode::Char('j') => review.scroll = review.scroll.saturating_add(1),
+            KeyCode::Up | KeyCode::Char('k') => review.scroll = review.scroll.saturating_sub(1),
+            KeyCode::PageDown => review.scroll = review.scroll.saturating_add(15),
+            KeyCode::PageUp => review.scroll = review.scroll.saturating_sub(15),
+            KeyCode::Home | KeyCode::Char('g') => review.scroll = 0,
+            KeyCode::End | KeyCode::Char('G') => review.scroll = u16::MAX / 2,
+            KeyCode::Char('?') => self.overlay = Overlay::Help,
             _ => {}
         }
     }

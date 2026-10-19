@@ -7,6 +7,7 @@ pub mod git;
 pub mod llm;
 pub mod prompts;
 pub mod proposal;
+pub mod rules;
 pub mod tui;
 pub mod update;
 pub mod workflow;

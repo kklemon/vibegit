@@ -1,10 +1,13 @@
 //! Background thread that owns the workflow and performs all slow operations.
 
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::changes::{ChangeSet, FileSummary};
 use crate::git::CommitMode;
+use crate::rules::DerivedRules;
 use crate::workflow::{Leftover, Workflow, WorkflowError};
+use crate::DEFAULT_RULES;
 
 #[derive(Debug, Clone)]
 pub struct ApplyItem {
@@ -16,10 +19,19 @@ pub struct ApplyItem {
 
 #[derive(Debug)]
 pub enum Cmd {
-    /// Preflight, then collect and generate.
+    /// Preflight, then (rules offer and) collect and generate.
     Begin,
-    /// The user agreed to unstage; continue with collect and generate.
+    /// The user agreed to unstage; continue with the rest of `Begin`.
     Unstage,
+    /// Analyse the history and derive `.vibegitrules`.
+    DeriveRules,
+    /// Write `.vibegitrules`; `then_generate` continues with the commit workflow.
+    WriteRules {
+        text: String,
+        then_generate: bool,
+    },
+    /// Continue the commit workflow without rules.
+    SkipRules,
     /// Collect the remaining changes again and ask the model.
     Generate {
         instruction: Option<String>,
@@ -61,6 +73,13 @@ pub enum Evt {
     Status(String),
     Fatal(String),
     StagedChanges(Vec<String>),
+    /// No `.vibegitrules` exists; the UI may offer to derive one.
+    NoRules {
+        commits: usize,
+    },
+    RulesDerived(DerivedRules),
+    RulesFailed(String),
+    RulesWritten(PathBuf),
     NoChanges {
         branch: String,
     },
@@ -94,14 +113,33 @@ pub fn run(workflow: Workflow, rx: Receiver<Cmd>, tx: Sender<Evt>) {
     while let Ok(cmd) = rx.recv() {
         match cmd {
             Cmd::Begin => match worker.begin() {
-                Ok(true) => worker.generate(pending_instruction.clone()),
+                Ok(true) => worker.after_preflight(pending_instruction.clone()),
                 Ok(false) => {}
                 Err(e) => worker.fatal(e),
             },
             Cmd::Unstage => match worker.workflow.unstage_all() {
-                Ok(()) => worker.generate(pending_instruction.clone()),
+                Ok(()) => worker.after_preflight(pending_instruction.clone()),
                 Err(e) => worker.fatal(e),
             },
+            Cmd::DeriveRules => worker.derive_rules(),
+            Cmd::WriteRules {
+                text,
+                then_generate,
+            } => {
+                match worker.workflow.write_rules(&text) {
+                    Ok(path) => worker.send(Evt::RulesWritten(path)),
+                    Err(e) => {
+                        worker.send(Evt::RulesFailed(format!(
+                            "could not write the rules: {e:#}"
+                        )));
+                        continue;
+                    }
+                }
+                if then_generate {
+                    worker.generate(pending_instruction.clone());
+                }
+            }
+            Cmd::SkipRules => worker.generate(pending_instruction.clone()),
             Cmd::Generate { instruction } => {
                 pending_instruction = instruction.clone();
                 worker.generate(instruction);
@@ -129,7 +167,7 @@ impl Worker {
         self.send(Evt::Fatal(format!("{err:#}")));
     }
 
-    /// Returns `Ok(true)` when generation can start right away.
+    /// Returns `Ok(true)` when the workflow can continue right away.
     fn begin(&mut self) -> Result<bool, WorkflowError> {
         self.status("Checking the repository...");
         let pre = self.workflow.preflight()?;
@@ -138,6 +176,34 @@ impl Worker {
             return Ok(false);
         }
         Ok(true)
+    }
+
+    /// Offers rule derivation when the project has none, otherwise generates.
+    fn after_preflight(&mut self, instruction: Option<String>) {
+        if !self.workflow.has_rules() && self.workflow.config.confirmations.derive_rules {
+            let commits = self.workflow.repo.commit_count();
+            if commits > 0 {
+                self.send(Evt::NoRules { commits });
+                return;
+            }
+        }
+        self.generate(instruction);
+    }
+
+    fn derive_rules(&mut self) {
+        let n = self.workflow.config.init.commits;
+        self.status(format!("Analyzing the last {n} commits..."));
+        match self.workflow.derive_rules() {
+            Ok(rules) => self.send(Evt::RulesDerived(rules)),
+            Err(WorkflowError::NoHistory) => self.send(Evt::RulesDerived(DerivedRules {
+                observations: vec![
+                    "The repository has no commits yet, so this is VibeGit's default template."
+                        .into(),
+                ],
+                rules: DEFAULT_RULES.trim_end().to_string(),
+            })),
+            Err(e) => self.send(Evt::RulesFailed(format!("{e:#}"))),
+        }
     }
 
     fn generate(&mut self, instruction: Option<String>) {
@@ -158,7 +224,7 @@ impl Worker {
             return;
         }
         self.status(format!(
-            "Asking the model about {} change unit(s) in {} file(s)...",
+            "Analyzing {} change unit(s) in {} file(s)...",
             changes.len(),
             changes.files.len()
         ));

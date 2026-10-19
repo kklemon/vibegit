@@ -27,6 +27,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         Screen::Diff => render_diff(frame, app, body),
         Screen::Summary => render_summary(frame, app, body),
         Screen::Error => render_error(frame, app, body),
+        Screen::Rules => render_rules(frame, app, body),
     }
     render_footer(frame, app, footer, &buttons, &rows);
     render_overlay(frame, app, area);
@@ -560,7 +561,7 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 }
                 Confirm::Push => "Push the new commits to the remote?".to_string(),
                 Confirm::Rerun => {
-                    "Discard the current proposals and ask the model again?".to_string()
+                    "Discard the current proposals and generate new ones?".to_string()
                 }
                 Confirm::QuitWithPending => {
                     "Some proposals are still pending. Quit anyway?".to_string()
@@ -589,7 +590,7 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
             frame.render_widget(Clear, rect);
             editor.set_block(
                 Block::bordered()
-                    .title(" Instruction for the model  (Enter regenerate · Esc cancel) ")
+                    .title(" Instruction for regenerating the proposals  (Enter regenerate · Esc cancel) ")
                     .border_style(Style::default().fg(Color::Cyan)),
             );
             frame.render_widget(&*editor, rect);
@@ -658,6 +659,21 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 rows.len() as u16 + 2,
             );
         }
+        Overlay::DeriveRules(commits) => {
+            let lines = vec![
+                Line::from(""),
+                Line::from("  No .vibegitrules found in this repository."),
+                Line::from(""),
+                Line::from(format!(
+                    "  VibeGit can analyse the last {commits} commit(s) and derive this project's"
+                )),
+                Line::from("  commit conventions (message style, granularity, grouping) into a"),
+                Line::from("  .vibegitrules file, which you review before it is written."),
+                Line::from(""),
+                Line::from("  [y] yes, derive rules   [n] not now   [N] never ask"),
+            ];
+            modal(frame, area, " Project rules ", lines, Color::Cyan, 78, 10);
+        }
         Overlay::Applying => {
             let mut lines = vec![Line::from(vec![
                 Span::styled(
@@ -679,6 +695,56 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
             modal(frame, area, " Committing ", lines, Color::Cyan, 80, 12);
         }
     }
+}
+
+fn render_rules(frame: &mut Frame, app: &mut App, area: Rect) {
+    let target = shorten_path(&app.rules_target, 60);
+    let Some(review) = app.rules.as_mut() else {
+        return;
+    };
+    let obs_height = (review.observations.len() as u16 + 2)
+        .max(3)
+        .min(area.height / 3);
+    let [obs_area, rules_area] =
+        Layout::vertical([Constraint::Length(obs_height), Constraint::Min(3)]).areas(area);
+    let obs_lines: Vec<Line> = review
+        .observations
+        .iter()
+        .map(|o| Line::from(format!("• {o}")))
+        .collect();
+    frame.render_widget(
+        Paragraph::new(obs_lines)
+            .block(Block::bordered().title(" Observed conventions "))
+            .wrap(Wrap { trim: false }),
+        obs_area,
+    );
+    if let Some(editor) = review.editor.as_mut() {
+        editor.set_block(
+            Block::bordered()
+                .title(" Edit .vibegitrules  (Ctrl+S apply · Esc cancel) ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
+        frame.render_widget(&*editor, rules_area);
+        return;
+    }
+    let lines: Vec<Line> = review
+        .rules
+        .lines()
+        .map(|l| Line::from(l.to_string()))
+        .collect();
+    let total = lines.len() as u16;
+    let visible = rules_area.height.saturating_sub(2);
+    let max_scroll = total.saturating_sub(visible);
+    if review.scroll > max_scroll {
+        review.scroll = max_scroll;
+    }
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(Block::bordered().title(format!(" Proposed {target} ")))
+            .wrap(Wrap { trim: false })
+            .scroll((review.scroll, 0)),
+        rules_area,
+    );
 }
 
 fn modal(

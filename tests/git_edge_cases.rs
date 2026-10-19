@@ -13,8 +13,9 @@ use std::process::Command;
 use tempfile::TempDir;
 use vibegit::config::Config;
 use vibegit::git::{CommitMode, GitRepo, GitRunner, InProgress};
-use vibegit::llm::{LlmError, ProposeRequest, Proposer};
+use vibegit::llm::{LlmError, ProposeRequest, Proposer, RulesRequest};
 use vibegit::proposal::{CommitProposal, ProposalResult};
+use vibegit::rules::DerivedRules;
 use vibegit::workflow::{Workflow, WorkflowError};
 
 struct EachOwn {
@@ -49,6 +50,18 @@ impl Proposer for EachOwn {
             raw: String::new(),
         })?;
         Ok(result)
+    }
+
+    fn derive_rules(&self, req: RulesRequest<'_>) -> Result<DerivedRules, LlmError> {
+        let commits = req
+            .user
+            .lines()
+            .filter(|l| l.starts_with("## Commit "))
+            .count();
+        Ok(DerivedRules {
+            observations: vec![format!("{commits} commits analysed")],
+            rules: format!("Test rules from {commits} commits."),
+        })
     }
 }
 
@@ -715,4 +728,100 @@ fn oversize_files_get_placeholders_but_still_commit() {
         &rendered[..200.min(rendered.len())]
     );
     assert!(!rendered.contains("line 39999"));
+}
+
+// --- rule derivation ----------------------------------------------------------
+
+#[test]
+fn rules_are_derived_from_history_and_written() {
+    let sb = Sandbox::with_initial_commit();
+    sb.edit_line("base.txt", 5, "changed 5");
+    sb.git(&["commit", "-q", "-am", "second: change a line"]);
+    sb.write("docs/new.md", b"# doc\n");
+    sb.git(&["add", "docs/new.md"]);
+    sb.git(&["commit", "-q", "-m", "third: add a doc"]);
+    let mut wf = sb.workflow(false);
+    wf.config.init.max_lines_per_file = 2;
+
+    let ctx = wf.history_context().unwrap();
+    assert_eq!(ctx.commits_available, 3);
+    assert_eq!(ctx.commits_included, 3);
+    assert!(
+        ctx.text.starts_with("Commits in the repository: 3."),
+        "{}",
+        ctx.text
+    );
+    assert!(
+        ctx.text.contains("## Commit 1:") && ctx.text.contains("third: add a doc"),
+        "{}",
+        ctx.text
+    );
+    assert!(
+        ctx.text.contains("### docs/new.md (new file, +1 -0)"),
+        "{}",
+        ctx.text
+    );
+    assert!(
+        ctx.text.contains("### base.txt (modified, +1 -1)"),
+        "{}",
+        ctx.text
+    );
+    assert!(ctx.text.contains("more diff lines"), "{}", ctx.text);
+    assert!(
+        ctx.text
+            .contains("File types touched: txt (2), dat (1), md (1)"),
+        "{}",
+        ctx.text
+    );
+
+    assert!(!wf.has_rules());
+    let derived = wf.derive_rules().unwrap();
+    assert_eq!(derived.rules, "Test rules from 3 commits.");
+    let path = wf.write_rules(&derived.rules).unwrap();
+    assert_eq!(path, sb.root.canonicalize().unwrap().join(".vibegitrules"));
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "Test rules from 3 commits.\n"
+    );
+    assert!(wf.has_rules());
+    assert!(wf
+        .project_instructions
+        .as_deref()
+        .unwrap()
+        .contains("Test rules"));
+    // The new rules reach the model on the next proposal.
+    sb.edit_line("base.txt", 6, "changed 6");
+    let changes = wf.collect().unwrap();
+    let context = wf.build_context(&changes, None).unwrap();
+    assert!(context.contains("Project Instructions: \"Test rules from 3 commits.\""));
+}
+
+#[test]
+fn rules_derivation_respects_commit_limit_and_budget() {
+    let sb = Sandbox::with_initial_commit();
+    for i in 0..5 {
+        sb.edit_line("base.txt", 1 + 8 * i, &format!("edit {i}"));
+        sb.git(&["commit", "-q", "-am", &format!("commit edit {i}")]);
+    }
+    let mut wf = sb.workflow(false);
+    wf.config.init.commits = 3;
+    let ctx = wf.history_context().unwrap();
+    assert_eq!(ctx.commits_available, 6);
+    assert_eq!(ctx.commits_included, 3);
+    assert!(
+        ctx.text.contains("Message:\n  commit edit 4") && !ctx.text.contains("commit edit 1"),
+        "{}",
+        ctx.text
+    );
+    wf.config.init.commits = 6;
+    wf.config.init.max_total_kb = 0; // only the newest commit fits
+    let ctx = wf.history_context().unwrap();
+    assert_eq!(ctx.commits_included, 1);
+}
+
+#[test]
+fn rules_derivation_without_commits_reports_no_history() {
+    let sb = Sandbox::new();
+    let wf = sb.workflow(false);
+    assert!(matches!(wf.derive_rules(), Err(WorkflowError::NoHistory)));
 }

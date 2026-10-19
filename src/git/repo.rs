@@ -79,6 +79,15 @@ pub enum CommitMode {
     Editor,
 }
 
+/// One commit of the recent history, as used to derive `.vibegitrules`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryCommit {
+    pub sha: String,
+    pub short_sha: String,
+    pub date: String,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitInfo {
     pub sha: String,
@@ -338,6 +347,71 @@ impl GitRepo {
             Ok(out) if out.success() => out.stdout_str().lines().map(|l| l.to_string()).collect(),
             _ => Vec::new(),
         }
+    }
+
+    /// The most recent non-merge commits, newest first.
+    pub fn history(&self, n: usize) -> GitResult<Vec<HistoryCommit>> {
+        let count = n.to_string();
+        let out = self.runner.run_raw(
+            &[
+                "log",
+                "-n",
+                &count,
+                "--no-merges",
+                "-z",
+                "--date=short",
+                "--format=%H%x1f%h%x1f%ad%x1f%B",
+            ],
+            None,
+        )?;
+        if !out.success() {
+            return Ok(Vec::new());
+        }
+        let text = String::from_utf8_lossy(&out.stdout);
+        Ok(text
+            .split('\0')
+            .filter(|e| !e.trim().is_empty())
+            .filter_map(|entry| {
+                let mut parts = entry.splitn(4, '\x1f');
+                Some(HistoryCommit {
+                    sha: parts.next()?.trim().to_string(),
+                    short_sha: parts.next()?.trim().to_string(),
+                    date: parts.next()?.trim().to_string(),
+                    message: parts.next()?.trim().to_string(),
+                })
+            })
+            .collect())
+    }
+
+    /// The patch a commit introduced (renames detected, no commit header).
+    pub fn commit_patch(&self, sha: &str) -> GitResult<Vec<u8>> {
+        let out = self.runner.run(
+            &[
+                "diff-tree",
+                "-p",
+                "-r",
+                "-M",
+                "--root",
+                "--no-commit-id",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-color",
+                sha,
+                "--",
+            ],
+            None,
+        )?;
+        Ok(out.stdout)
+    }
+
+    /// Number of commits reachable from HEAD (0 when HEAD is unborn).
+    pub fn commit_count(&self) -> usize {
+        self.runner
+            .run_raw(&["rev-list", "--count", "HEAD"], None)
+            .ok()
+            .filter(|o| o.success())
+            .and_then(|o| o.stdout_str().trim().parse().ok())
+            .unwrap_or(0)
     }
 
     pub fn commit(&self, message: &str, mode: CommitMode) -> GitResult<CommitInfo> {

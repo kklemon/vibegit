@@ -5,12 +5,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
 
-use super::app::{App, Confirm, Effect, Overlay, Screen};
+use super::app::{App, Confirm, Effect, Mode, Overlay, Screen};
 use super::ui;
+use super::worker::Cmd;
 use super::worker::{Evt, ExcludedView, ProposalView, Snapshot};
 use crate::changes::FileSummary;
 use crate::config::Confirmations;
 use crate::git::FileKind;
+use crate::rules::DerivedRules;
 use crate::workflow::Leftover;
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -338,4 +340,111 @@ fn button_bar_renders_and_wraps() {
             .count();
         assert_eq!(bar_rows, expected_rows, "{joined}");
     }
+}
+
+fn derived() -> DerivedRules {
+    DerivedRules {
+        observations: vec!["Lowercase subjects.".into(), "Small commits.".into()],
+        rules: "Use lowercase subjects.\n\n- Keep commits small.".into(),
+    }
+}
+
+#[test]
+fn init_mode_reviews_edits_and_writes_rules() {
+    let mut app = App::new(
+        "/tmp/repo".into(),
+        "m".into(),
+        None,
+        false,
+        Confirmations::default(),
+    );
+    app.mode = Mode::Init;
+    draw(&mut app, 80, 24);
+    app.on_event(Evt::RulesDerived(derived()));
+    assert_eq!(app.screen, Screen::Rules);
+    draw(&mut app, 80, 24);
+    draw(&mut app, 30, 8);
+    // Edit in place: append text, apply with Ctrl+S.
+    app.on_key(key(KeyCode::Char('e')));
+    assert!(app.rules.as_ref().unwrap().editor.is_some());
+    draw(&mut app, 80, 24);
+    app.on_key(key(KeyCode::End));
+    app.on_key(key(KeyCode::Char('!')));
+    app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert!(app.rules.as_ref().unwrap().editor.is_none());
+    assert!(app
+        .rules
+        .as_ref()
+        .unwrap()
+        .rules
+        .starts_with("Use lowercase subjects.!"));
+    // Template replaces the text in init mode.
+    app.on_key(key(KeyCode::Char('t')));
+    assert!(app.rules.as_ref().unwrap().rules.contains("all-lowercase"));
+    // Enter writes without generating proposals.
+    app.on_key(key(KeyCode::Enter));
+    let effects = app.take_effects();
+    assert!(effects.iter().any(|e| matches!(
+        e,
+        Effect::Send(Cmd::WriteRules {
+            then_generate: false,
+            ..
+        })
+    )));
+    app.on_event(Evt::RulesWritten("/tmp/repo/.vibegitrules".into()));
+    assert!(app.should_quit);
+    assert!(app.farewell().iter().any(|l| l.contains("Wrote")));
+}
+
+#[test]
+fn commit_mode_offers_rules_and_can_decline_forever() {
+    let mut app = App::new(
+        "r".into(),
+        "m".into(),
+        None,
+        false,
+        Confirmations::default(),
+    );
+    app.on_event(Evt::NoRules { commits: 12 });
+    assert!(matches!(app.overlay, Overlay::DeriveRules(12)));
+    draw(&mut app, 100, 30);
+    app.on_key(key(KeyCode::Char('N')));
+    assert!(!app.confirmations.derive_rules);
+    let effects = app.take_effects();
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, Effect::SaveConfirmations(c) if !c.derive_rules)));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, Effect::Send(Cmd::SkipRules))));
+    assert_eq!(app.screen, Screen::Loading);
+
+    let mut app = App::new(
+        "r".into(),
+        "m".into(),
+        None,
+        false,
+        Confirmations::default(),
+    );
+    app.on_event(Evt::NoRules { commits: 3 });
+    app.on_key(key(KeyCode::Char('y')));
+    assert!(app
+        .take_effects()
+        .iter()
+        .any(|e| matches!(e, Effect::Send(Cmd::DeriveRules))));
+    app.on_event(Evt::RulesDerived(derived()));
+    assert_eq!(app.screen, Screen::Rules);
+    app.on_key(key(KeyCode::Enter));
+    assert!(app.take_effects().iter().any(|e| matches!(
+        e,
+        Effect::Send(Cmd::WriteRules {
+            then_generate: true,
+            ..
+        })
+    )));
+    app.on_event(Evt::RulesWritten("r/.vibegitrules".into()));
+    assert_eq!(app.screen, Screen::Loading);
+    assert!(!app.should_quit);
+    app.on_event(Evt::Proposals(snapshot()));
+    assert_eq!(app.screen, Screen::Proposals);
 }

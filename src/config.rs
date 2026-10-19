@@ -17,6 +17,7 @@ pub struct Config {
     pub model: ModelConfig,
     pub context_formatting: ContextFormattingConfig,
     pub confirmations: Confirmations,
+    pub init: InitConfig,
     pub api_keys: BTreeMap<String, String>,
 }
 
@@ -30,6 +31,8 @@ pub struct Confirmations {
     pub rerun: bool,
     pub quit: bool,
     pub unstage: bool,
+    /// Offer to derive `.vibegitrules` from the history when the file is missing.
+    pub derive_rules: bool,
 }
 
 impl Default for Confirmations {
@@ -40,6 +43,32 @@ impl Default for Confirmations {
             rerun: true,
             quit: true,
             unstage: true,
+            derive_rules: true,
+        }
+    }
+}
+
+/// How much history `vibegit init` analyses to derive `.vibegitrules`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct InitConfig {
+    /// Number of recent non-merge commits to analyse.
+    pub commits: usize,
+    /// Files shown per commit; the rest are listed by name only.
+    pub max_files_per_commit: usize,
+    /// Diff lines shown per file.
+    pub max_lines_per_file: usize,
+    /// Older commits are dropped once the rendered history exceeds this size.
+    pub max_total_kb: u64,
+}
+
+impl Default for InitConfig {
+    fn default() -> Self {
+        Self {
+            commits: 20,
+            max_files_per_commit: 8,
+            max_lines_per_file: 20,
+            max_total_kb: 150,
         }
     }
 }
@@ -52,6 +81,7 @@ impl Default for Config {
             model: ModelConfig::default(),
             context_formatting: ContextFormattingConfig::default(),
             confirmations: Confirmations::default(),
+            init: InitConfig::default(),
             api_keys: BTreeMap::new(),
         }
     }
@@ -256,6 +286,29 @@ impl Config {
             "confirmations.rerun" => self.confirmations.rerun = parse_bool(path, value)?,
             "confirmations.quit" => self.confirmations.quit = parse_bool(path, value)?,
             "confirmations.unstage" => self.confirmations.unstage = parse_bool(path, value)?,
+            "confirmations.derive_rules" => {
+                self.confirmations.derive_rules = parse_bool(path, value)?
+            }
+            "init.commits" => {
+                self.init.commits = value
+                    .parse::<usize>()
+                    .map_err(|_| bad(path, value, "an integer"))?
+            }
+            "init.max_files_per_commit" => {
+                self.init.max_files_per_commit = value
+                    .parse::<usize>()
+                    .map_err(|_| bad(path, value, "an integer"))?
+            }
+            "init.max_lines_per_file" => {
+                self.init.max_lines_per_file = value
+                    .parse::<usize>()
+                    .map_err(|_| bad(path, value, "an integer"))?
+            }
+            "init.max_total_kb" => {
+                self.init.max_total_kb = value
+                    .parse::<u64>()
+                    .map_err(|_| bad(path, value, "an integer"))?
+            }
             _ => {
                 if let Some(key) = path.strip_prefix("api_keys.") {
                     if key.is_empty() || key.contains('.') {
@@ -295,6 +348,11 @@ pub const KNOWN_PATHS: &[&str] = &[
     "confirmations.rerun",
     "confirmations.quit",
     "confirmations.unstage",
+    "confirmations.derive_rules",
+    "init.commits",
+    "init.max_files_per_commit",
+    "init.max_lines_per_file",
+    "init.max_total_kb",
     "api_keys.<NAME>",
 ];
 

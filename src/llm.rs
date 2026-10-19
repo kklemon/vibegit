@@ -7,9 +7,11 @@ use genai::adapter::AdapterKind;
 use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatResponseFormat, JsonSpec};
 use genai::resolver::{AuthData, Endpoint};
 use genai::{Client, ModelIden, ServiceTarget};
+use serde_json::Value;
 
 use crate::config::Config;
-use crate::proposal::{output_schema, parse_response, ProposalResult};
+use crate::proposal::{output_schema, parse_response, CommitProposal, ProposalResult};
+use crate::rules::{parse_rules_response, rules_schema, DerivedRules};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LlmError {
@@ -38,8 +40,15 @@ pub struct ProposeRequest<'a> {
     pub validate: &'a dyn Fn(&ProposalResult) -> Result<(), String>,
 }
 
+pub struct RulesRequest<'a> {
+    pub system: &'a str,
+    pub user: &'a str,
+}
+
+/// Everything the workflow asks a model for.
 pub trait Proposer: Send {
     fn propose(&self, req: ProposeRequest<'_>) -> Result<ProposalResult, LlmError>;
+    fn derive_rules(&self, req: RulesRequest<'_>) -> Result<DerivedRules, LlmError>;
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +223,7 @@ pub fn resolve_model(config: &Config) -> Result<ResolvedModel, LlmError> {
     })
 }
 
-/// Deterministic proposer for tests and interface smoke runs: every change unit
+/// Deterministic model stand-in for tests and interface smoke runs. Every change unit
 /// becomes its own commit. Enabled with the `VIBEGIT_FAKE_PROPOSER` environment variable.
 pub struct FakeProposer;
 
@@ -229,7 +238,7 @@ impl Proposer for FakeProposer {
         let result = ProposalResult {
             commit_proposals: ids
                 .iter()
-                .map(|id| crate::proposal::CommitProposal {
+                .map(|id| CommitProposal {
                     explanation: format!("Fake proposal for change {id}."),
                     commit_message: format!("fake commit for change {id}"),
                     change_ids: vec![*id],
@@ -244,15 +253,29 @@ impl Proposer for FakeProposer {
         })?;
         Ok(result)
     }
+
+    fn derive_rules(&self, req: RulesRequest<'_>) -> Result<DerivedRules, LlmError> {
+        let commits = req
+            .user
+            .lines()
+            .filter(|l| l.starts_with("## Commit "))
+            .count();
+        Ok(DerivedRules {
+            observations: vec![format!("Fake analysis of {commits} commit(s).")],
+            rules: format!(
+                "Fake rules derived from {commits} commit(s).\n\n- Use short lowercase subjects.\n- Keep commits small."
+            ),
+        })
+    }
 }
 
-/// A proposer that calls the configured model, retrying once with the validation error.
-pub struct LlmProposer {
+/// Shared request plumbing: JSON-constrained chat with one validation retry.
+pub struct LlmClient {
     pub model: ResolvedModel,
     pub timeout: Duration,
 }
 
-impl LlmProposer {
+impl LlmClient {
     pub fn new(model: ResolvedModel) -> Self {
         Self {
             model,
@@ -295,11 +318,8 @@ impl LlmProposer {
         options
     }
 
-    fn formats(&self, allow_excluding: bool) -> Vec<Option<ChatResponseFormat>> {
-        let spec = ChatResponseFormat::JsonSpec(JsonSpec::new(
-            "commit_proposals",
-            output_schema(allow_excluding, false),
-        ));
+    fn formats(&self, spec_name: &str, schema: Value) -> Vec<Option<ChatResponseFormat>> {
+        let spec = ChatResponseFormat::JsonSpec(JsonSpec::new(spec_name, schema));
         if self.model.endpoint.is_some() {
             // Unknown servers may not implement json_schema; degrade gracefully.
             vec![Some(spec), Some(ChatResponseFormat::JsonMode), None]
@@ -307,18 +327,25 @@ impl LlmProposer {
             vec![Some(spec)]
         }
     }
-}
 
-impl Proposer for LlmProposer {
-    fn propose(&self, req: ProposeRequest<'_>) -> Result<ProposalResult, LlmError> {
+    /// Sends a system/user pair, parses the JSON reply with `parse`, and retries once
+    /// with the parse or validation error when the first answer is unusable.
+    pub fn chat_json<T>(
+        &self,
+        system: &str,
+        user: &str,
+        spec_name: &str,
+        schema: Value,
+        parse: &dyn Fn(&str) -> Result<T, String>,
+    ) -> Result<T, LlmError> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| LlmError::Runtime(e.to_string()))?;
         let client = self.client()?;
         let iden = ModelIden::new(self.model.adapter, self.model.model.as_str());
-        let formats = self.formats(req.allow_excluding);
-        let mut messages = vec![ChatMessage::system(req.system), ChatMessage::user(req.user)];
+        let formats = self.formats(spec_name, schema);
+        let mut messages = vec![ChatMessage::system(system), ChatMessage::user(user)];
         let max_attempts = 2;
         let mut format_index = 0;
         let mut attempt = 0;
@@ -329,9 +356,7 @@ impl Proposer for LlmProposer {
                 runtime.block_on(client.exec_chat(iden.clone(), request, Some(&options)));
             let text = match response {
                 Ok(r) => r.first_text().map(|t| t.to_string()),
-                Err(e) if format_index + 1 < formats.len() => {
-                    // Try a less demanding response format on this server.
-                    let _ = e;
+                Err(_) if format_index + 1 < formats.len() => {
                     format_index += 1;
                     continue;
                 }
@@ -339,13 +364,12 @@ impl Proposer for LlmProposer {
             };
             let text = text.ok_or(LlmError::Empty)?;
             attempt += 1;
-            let parsed = parse_response(&text).and_then(|r| (req.validate)(&r).map(|_| r));
-            match parsed {
+            match parse(&text) {
                 Ok(result) => return Ok(result),
                 Err(reason) if attempt < max_attempts => {
                     messages.push(ChatMessage::assistant(text));
                     messages.push(ChatMessage::user(format!(
-                        "Your previous response was invalid: {reason}\n\nRespond again with a corrected JSON object that follows the required structure and covers every Change ID exactly once."
+                        "Your previous response was invalid: {reason}\n\nRespond again with a corrected JSON object that follows the required structure."
                     )));
                 }
                 Err(reason) => {
@@ -357,6 +381,42 @@ impl Proposer for LlmProposer {
                 }
             }
         }
+    }
+}
+
+/// The configured model, used for both commit proposals and rule derivation.
+pub struct LlmProposer {
+    client: LlmClient,
+}
+
+impl LlmProposer {
+    pub fn new(model: ResolvedModel) -> Self {
+        Self {
+            client: LlmClient::new(model),
+        }
+    }
+}
+
+impl Proposer for LlmProposer {
+    fn propose(&self, req: ProposeRequest<'_>) -> Result<ProposalResult, LlmError> {
+        let parse = |text: &str| parse_response(text).and_then(|r| (req.validate)(&r).map(|_| r));
+        self.client.chat_json(
+            req.system,
+            req.user,
+            "commit_proposals",
+            output_schema(req.allow_excluding, false),
+            &parse,
+        )
+    }
+
+    fn derive_rules(&self, req: RulesRequest<'_>) -> Result<DerivedRules, LlmError> {
+        self.client.chat_json(
+            req.system,
+            req.user,
+            "vibegit_rules",
+            rules_schema(),
+            &parse_rules_response,
+        )
     }
 }
 
@@ -409,5 +469,16 @@ mod tests {
         assert_eq!(r.endpoint.as_deref(), Some("https://api.example.com/v1/"));
         assert_eq!(r.model, "my-model");
         assert_eq!(r.temperature, Some(0.1));
+    }
+
+    #[test]
+    fn fake_proposer_derives_rules() {
+        let rules = FakeProposer
+            .derive_rules(RulesRequest {
+                system: "",
+                user: "## Commit 1: a\n## Commit 2: b\n",
+            })
+            .unwrap();
+        assert!(rules.rules.contains("2 commit(s)"));
     }
 }

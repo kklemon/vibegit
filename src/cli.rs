@@ -14,7 +14,7 @@ use crate::llm::{resolve_model, FakeProposer, LlmProposer, Proposer};
 use crate::proposal::ProposalResult;
 use crate::tui;
 use crate::update::check_for_update;
-use crate::workflow::{Workflow, RULES_FILENAME};
+use crate::workflow::{Workflow, WorkflowError, RULES_FILENAME};
 use crate::{DEFAULT_RULES, VERSION};
 
 #[derive(Parser)]
@@ -38,11 +38,7 @@ enum Command {
     /// Analyze uncommitted changes and create semantic commits (the default command)
     Commit(CommitArgs),
     /// Create a starter .vibegitrules file in the current directory
-    Init {
-        /// Replace an existing .vibegitrules file
-        #[arg(short, long)]
-        force: bool,
-    },
+    Init(InitArgs),
     /// Show or change the configuration; without a subcommand this runs the setup wizard
     Config {
         #[command(subcommand)]
@@ -65,6 +61,28 @@ pub struct CommitArgs {
     #[arg(long)]
     pub unstage: bool,
     /// Write prompts and responses to a debug directory and print full error chains
+    #[arg(short, long)]
+    pub debug: bool,
+}
+
+#[derive(Args, Clone, Default, Debug)]
+pub struct InitArgs {
+    /// Replace an existing .vibegitrules file
+    #[arg(short, long)]
+    pub force: bool,
+    /// Write the derived rules without the interactive review
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+    /// Print the derived rules instead of writing them
+    #[arg(long)]
+    pub print: bool,
+    /// Write VibeGit's static template instead of analysing the history
+    #[arg(long)]
+    pub template: bool,
+    /// Number of recent commits to analyse (default: init.commits from the config)
+    #[arg(short = 'n', long, value_name = "N")]
+    pub commits: Option<usize>,
+    /// Write prompts and responses to a debug directory
     #[arg(short, long)]
     pub debug: bool,
 }
@@ -92,7 +110,7 @@ pub fn run() -> i32 {
     let result = match cli.command {
         None => run_commit(cli.commit),
         Some(Command::Commit(args)) => run_commit(args),
-        Some(Command::Init { force }) => run_init(force),
+        Some(Command::Init(args)) => run_init(args),
         Some(Command::Config { action }) => run_config(action),
     };
     match result {
@@ -130,14 +148,7 @@ fn run_commit(args: CommitArgs) -> Result<i32> {
     let cwd = std::env::current_dir().context("could not determine the current directory")?;
     let repo =
         GitRepo::discover(&cwd).map_err(|e| anyhow!("not inside a git working tree: {e}"))?;
-    let (proposer, model_label): (Box<dyn Proposer>, String) =
-        if std::env::var_os("VIBEGIT_FAKE_PROPOSER").is_some() {
-            (Box::new(FakeProposer), "fake proposer".to_string())
-        } else {
-            let model = resolve_model(&config)?;
-            let label = model.label();
-            (Box::new(LlmProposer::new(model)), label)
-        };
+    let (proposer, model_label) = build_proposer(&config)?;
     let confirmations = config.confirmations;
     let mut workflow = Workflow::new(repo, config, proposer);
     if args.debug {
@@ -161,6 +172,16 @@ fn run_commit(args: CommitArgs) -> Result<i32> {
             },
         )
     }
+}
+
+/// The configured model, or the deterministic stand-in when `VIBEGIT_FAKE_PROPOSER` is set.
+fn build_proposer(config: &Config) -> Result<(Box<dyn Proposer>, String)> {
+    if std::env::var_os("VIBEGIT_FAKE_PROPOSER").is_some() {
+        return Ok((Box::new(FakeProposer), "fake proposer".to_string()));
+    }
+    let model = resolve_model(config)?;
+    let label = model.label();
+    Ok((Box::new(LlmProposer::new(model)), label))
 }
 
 fn confirm(question: &str) -> Result<bool> {
@@ -190,6 +211,9 @@ fn run_yolo(workflow: Workflow, args: &CommitArgs, model_label: &str) -> Result<
             bail!("staged changes present; unstage them or pass --unstage");
         }
     }
+    if !workflow.has_rules() {
+        eprintln!("hint: no .vibegitrules in this repository; `vibegit init` derives one from your history");
+    }
     let mut changes = workflow.collect()?;
     for w in &changes.warnings {
         eprintln!("warning: {w}");
@@ -199,7 +223,7 @@ fn run_yolo(workflow: Workflow, args: &CommitArgs, model_label: &str) -> Result<
         return Ok(0);
     }
     println!(
-        "Found {} change unit(s) in {} file(s). Asking {}...",
+        "Analyzing {} change unit(s) in {} file(s) with {}...",
         changes.len(),
         changes.files.len(),
         model_label
@@ -280,17 +304,76 @@ fn print_proposals(result: &ProposalResult, changes: &crate::changes::ChangeSet)
     }
 }
 
-fn run_init(force: bool) -> Result<i32> {
-    let target = Path::new(RULES_FILENAME);
-    if target.exists() && !force {
-        bail!("{RULES_FILENAME} already exists; use --force to replace it");
+fn run_init(args: InitArgs) -> Result<i32> {
+    if args.template {
+        let target = Path::new(RULES_FILENAME);
+        if target.exists() && !args.force {
+            bail!("{RULES_FILENAME} already exists; use --force to replace it");
+        }
+        std::fs::write(target, DEFAULT_RULES)
+            .with_context(|| format!("could not write {RULES_FILENAME}"))?;
+        println!(
+            "Created {}",
+            std::env::current_dir()?.join(RULES_FILENAME).display()
+        );
+        return Ok(0);
     }
-    std::fs::write(target, DEFAULT_RULES)
-        .with_context(|| format!("could not write {RULES_FILENAME}"))?;
-    println!(
-        "Created {}",
-        std::env::current_dir()?.join(RULES_FILENAME).display()
+    let interactive = !(args.yes || args.print);
+    let config = load_or_setup_config(interactive)?;
+    let cwd = std::env::current_dir().context("could not determine the current directory")?;
+    let repo =
+        GitRepo::discover(&cwd).map_err(|e| anyhow!("not inside a git working tree: {e}"))?;
+    let rules_path = repo.root().join(RULES_FILENAME);
+    if rules_path.exists() && !args.force && !args.print {
+        bail!(
+            "{} already exists; use --force to replace it",
+            rules_path.display()
+        );
+    }
+    let (proposer, model_label) = build_proposer(&config)?;
+    let confirmations = config.confirmations;
+    let mut workflow = Workflow::new(repo, config, proposer);
+    if let Some(n) = args.commits {
+        workflow.config.init.commits = n.max(1);
+    }
+    if args.debug {
+        workflow.debug_dir = Some(debug_dir());
+    }
+    if interactive {
+        return tui::run_init(
+            workflow,
+            tui::Options {
+                instruction: None,
+                model_label,
+                debug: args.debug,
+                confirmations,
+            },
+        );
+    }
+    eprintln!(
+        "Analyzing the last {} commits with {}...",
+        workflow.config.init.commits, model_label
     );
+    let derived = match workflow.derive_rules() {
+        Ok(d) => d,
+        Err(WorkflowError::NoHistory) => {
+            eprintln!("The repository has no commits yet; using the default template.");
+            crate::rules::DerivedRules {
+                observations: Vec::new(),
+                rules: DEFAULT_RULES.trim_end().to_string(),
+            }
+        }
+        Err(e) => return Err(e.into()),
+    };
+    for o in &derived.observations {
+        eprintln!("- {o}");
+    }
+    if args.print {
+        println!("{}", derived.rules);
+        return Ok(0);
+    }
+    let path = workflow.write_rules(&derived.rules)?;
+    println!("Wrote {}", path.display());
     Ok(0)
 }
 

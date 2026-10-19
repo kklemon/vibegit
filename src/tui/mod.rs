@@ -29,7 +29,7 @@ use crate::update::spawn_update_check;
 use crate::workflow::Workflow;
 use crate::VERSION;
 
-pub use app::App;
+pub use app::{App, Mode};
 pub use worker::{Cmd, Evt};
 
 use app::Effect;
@@ -45,6 +45,15 @@ const TICK: Duration = Duration::from_millis(60);
 
 /// Runs the interactive commit workflow and returns the process exit code.
 pub fn run_commit(workflow: Workflow, options: Options) -> Result<i32> {
+    run_app(workflow, options, Mode::Commit)
+}
+
+/// Derives `.vibegitrules` from the history, lets the user review it, writes it.
+pub fn run_init(workflow: Workflow, options: Options) -> Result<i32> {
+    run_app(workflow, options, Mode::Init)
+}
+
+fn run_app(workflow: Workflow, options: Options, mode: Mode) -> Result<i32> {
     let repo_label = workflow.repo.root().display().to_string();
     let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
     let (evt_tx, evt_rx) = mpsc::channel::<Evt>();
@@ -61,7 +70,16 @@ pub fn run_commit(workflow: Workflow, options: Options) -> Result<i32> {
         options.debug,
         options.confirmations,
     );
-    cmd_tx.send(Cmd::Begin).ok();
+    app.mode = mode;
+    match mode {
+        Mode::Commit => {
+            cmd_tx.send(Cmd::Begin).ok();
+        }
+        Mode::Init => {
+            app.status = "Analyzing the commit history...".into();
+            cmd_tx.send(Cmd::DeriveRules).ok();
+        }
+    }
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture);
@@ -119,6 +137,13 @@ fn event_loop(
                     let edited = suspend(terminal, || edit_in_external_editor(&message))?;
                     match edited {
                         Ok(text) => app.set_message(index, text),
+                        Err(err) => app.status = format!("editor: {err:#}"),
+                    }
+                }
+                Effect::ExternalEditRules(text) => {
+                    let edited = suspend(terminal, || edit_in_external_editor(&text))?;
+                    match edited {
+                        Ok(text) => app.set_rules_text(text),
                         Err(err) => app.status = format!("editor: {err:#}"),
                     }
                 }

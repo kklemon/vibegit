@@ -109,20 +109,21 @@ pub fn output_schema(allow_excluding: bool, strict: bool) -> Value {
 }
 
 /// Extracts the JSON object from a model reply, tolerating code fences and prose around it.
-pub fn parse_response(text: &str) -> Result<ProposalResult, String> {
+pub fn extract_json(text: &str) -> Result<Value, String> {
     let trimmed = text.trim();
-    let candidate = if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
-        v
-    } else {
-        let start = trimmed.find('{').ok_or("no JSON object in the response")?;
-        let end = trimmed.rfind('}').ok_or("no JSON object in the response")?;
-        if end <= start {
-            return Err("no JSON object in the response".into());
-        }
-        serde_json::from_str::<Value>(&trimmed[start..=end])
-            .map_err(|e| format!("invalid JSON: {e}"))?
-    };
-    serde_json::from_value::<ProposalResult>(candidate)
+    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+        return Ok(v);
+    }
+    let start = trimmed.find('{').ok_or("no JSON object in the response")?;
+    let end = trimmed.rfind('}').ok_or("no JSON object in the response")?;
+    if end <= start {
+        return Err("no JSON object in the response".into());
+    }
+    serde_json::from_str::<Value>(&trimmed[start..=end]).map_err(|e| format!("invalid JSON: {e}"))
+}
+
+pub fn parse_response(text: &str) -> Result<ProposalResult, String> {
+    serde_json::from_value::<ProposalResult>(extract_json(text)?)
         .map_err(|e| format!("unexpected response shape: {e}"))
 }
 
