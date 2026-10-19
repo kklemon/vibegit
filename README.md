@@ -100,8 +100,10 @@ The setup wizard also runs automatically the first time `vibegit commit` finds n
 │                                     ││   A tests/status.rs +80 -0                 │
 └─────────────────────────────────────┘└────────────────────────────────────────────┘
  4 proposal(s) for 9 change unit(s) in 5 file(s).
- ↑↓ select  c commit  C all  e edit  d diff  s skip  J/K move  i instruct  m menu  ? help  q quit
+ [c Commit] [C Commit all] [e Edit] [d Diff] [s Skip] [i Instruct] [r Regenerate] [p Push] [? Help] [q Quit]
 ```
+
+The bottom row is a button bar. Every button shows its shortcut; `Tab` moves the keyboard focus into the bar, `←` `→` choose a button, `Enter` runs it, and buttons that do not apply to the selection are dimmed. The mouse works too: click a button or a proposal, scroll with the wheel. Dialogs show their choices as buttons as well.
 
 | Key | Action |
 | --- | --- |
@@ -119,7 +121,9 @@ The setup wizard also runs automatically the first time `vibegit commit` finds n
 | `p` | Push the created commits (sets an upstream when needed) |
 | `m` or `Space` | Open the action menu |
 | `?` | Show all keys |
+| `Tab` `Shift+Tab` | Focus the button bar (`←` `→` choose, `Enter` runs, `Esc` leaves) |
 | `q` | Quit; a summary of the created commits is shown first |
+| `Y` (in any confirmation) | Confirm and never ask again for that action; see `confirmations.*` below |
 
 Excluded groups appear at the end of the list in yellow. They are never committed; regenerate with an instruction (`i`) if they should be.
 
@@ -191,6 +195,7 @@ The legacy `google-gla:`, `google_genai:` and `xai:` prefixes are still accepted
 | `context_formatting.include_latest_commits` | `5` | Recent messages sent as style reference |
 | `context_formatting.truncate_lines` | `240` | Cut long diff lines before sending them |
 | `context_formatting.max_file_size_kb` | `512` | Larger files are sent as a placeholder only |
+| `confirmations.commit_all`, `.push`, `.rerun`, `.quit`, `.unstage` | `true` | Ask before committing all, pushing, regenerating, quitting with pending proposals, or unstaging. Pressing `Y` in the dialog sets the flag to `false`; set it back to `true` to ask again |
 
 ## Project rules (`.vibegitrules`)
 
