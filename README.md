@@ -97,6 +97,7 @@ Other settings: `allow_excluding_changes`, `watermark`, `context_formatting.*` (
 ## Safety
 
 * Only `git apply --cached`, `git reset -- <paths>`, `git commit` and, on request, `git push` run. The working tree is never written.
+* Editors and git clients that re-scan the repository after each commit briefly hold `index.lock`; VibeGit waits for it instead of failing.
 * Staged changes are unstaged first, after confirmation. Merges, rebases, cherry-picks and conflicts stop VibeGit before anything happens.
 * Changes inside submodules and nested repositories are reported and left alone; files above 50 MB are skipped.
 * A failed commit (for example a rejected hook) leaves the index clean and can be retried.
