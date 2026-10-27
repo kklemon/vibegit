@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod git;
 pub mod llm;
+pub mod openrouter;
 pub mod prompts;
 pub mod proposal;
 pub mod rules;

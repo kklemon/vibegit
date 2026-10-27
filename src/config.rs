@@ -407,7 +407,7 @@ mod tests {
 watermark = true
 
 [model]
-name = "openai:gpt-5.6-terra"
+name = "openai:gpt-6.1-terra"
 temperature = 0.2
 
 [context_formatting]
@@ -419,7 +419,7 @@ include_latest_commits = 3
 OPENAI_API_KEY = "sk-test-1234567890"
 "#;
         let config: Config = toml::from_str(text).unwrap();
-        assert_eq!(config.model.name, "openai:gpt-5.6-terra");
+        assert_eq!(config.model.name, "openai:gpt-6.1-terra");
         assert_eq!(config.model.temperature, Some(0.2));
         assert!(!config.allow_excluding_changes);
         assert_eq!(config.context_formatting.truncate_lines, Some(120));
@@ -432,7 +432,7 @@ OPENAI_API_KEY = "sk-test-1234567890"
     #[test]
     fn get_and_set_by_path() {
         let mut config = Config::default();
-        config.set("model.name", "grok:grok-code-fast-1").unwrap();
+        config.set("model.name", "grok:grok-4.7").unwrap();
         config.set("model.temperature", "0.5").unwrap();
         config.set("watermark", "false").unwrap();
         config.set("api_keys.GROK_API_KEY", "abc").unwrap();
@@ -441,7 +441,7 @@ OPENAI_API_KEY = "sk-test-1234567890"
             .unwrap();
         assert_eq!(
             config.get("model.name").unwrap().unwrap().as_str(),
-            Some("grok:grok-code-fast-1")
+            Some("grok:grok-4.7")
         );
         assert_eq!(
             config.get("model.temperature").unwrap().unwrap().as_float(),

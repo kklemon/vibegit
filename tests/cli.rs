@@ -63,15 +63,25 @@ impl Env {
     }
 
     fn vibegit(&self, cwd: &Path, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_vibegit"))
-            .args(args)
+        self.vibegit_with(cwd, args, true)
+    }
+
+    /// Runs the binary; `fake` selects the offline stand-in for the model.
+    fn vibegit_with(&self, cwd: &Path, args: &[&str], fake: bool) -> Output {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_vibegit"));
+        cmd.args(args)
             .current_dir(cwd)
             .env("HOME", &self.home)
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env("VIBEGIT_CONFIG_PATH", &self.config)
-            .env("VIBEGIT_FAKE_PROPOSER", "1")
-            .output()
-            .unwrap()
+            .env_remove("GOOGLE_API_KEY")
+            .env_remove("GEMINI_API_KEY");
+        if fake {
+            cmd.env("VIBEGIT_FAKE_PROPOSER", "1");
+        } else {
+            cmd.env_remove("VIBEGIT_FAKE_PROPOSER");
+        }
+        cmd.output().unwrap()
     }
 }
 
@@ -147,4 +157,49 @@ fn yolo_hints_at_missing_rules_and_commits_everything() {
     assert!(out.status.success(), "{}", text(&out.stderr));
     assert!(text(&out.stderr).contains("vibegit init"));
     assert!(text(&out.stdout).contains("All proposals applied"));
+}
+
+#[test]
+fn config_set_tests_the_model_and_config_test_repeats_it() {
+    let env = Env::new();
+    let out = env.vibegit(
+        &env.repo,
+        &["config", "set", "model.name", "openai:gpt-6.1-terra"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let stdout = text(&out.stdout);
+    assert!(stdout.contains("Set model.name"), "{stdout}");
+    assert!(stdout.contains("answered in"), "{stdout}");
+    assert!(fs::read_to_string(&env.config)
+        .unwrap()
+        .contains("openai:gpt-6.1-terra"));
+
+    let quiet = env.vibegit(&env.repo, &["config", "set", "watermark", "true"]);
+    assert!(quiet.status.success(), "{}", text(&quiet.stderr));
+    assert!(
+        !text(&quiet.stdout).contains("Testing"),
+        "{}",
+        text(&quiet.stdout)
+    );
+
+    let again = env.vibegit(&env.repo, &["config", "test"]);
+    assert!(again.status.success(), "{}", text(&again.stderr));
+    assert!(text(&again.stdout).contains("answered in"));
+}
+
+#[test]
+fn config_test_reports_a_missing_api_key() {
+    let env = Env::new();
+    let out = env.vibegit_with(&env.repo, &["config", "test"], false);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        text(&out.stdout).contains("failed"),
+        "{}",
+        text(&out.stdout)
+    );
+    assert!(
+        text(&out.stderr).contains("GOOGLE_API_KEY"),
+        "{}",
+        text(&out.stderr)
+    );
 }

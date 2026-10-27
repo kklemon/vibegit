@@ -1,7 +1,7 @@
-//! Model access through the `genai` crate, which speaks to Gemini, OpenAI, xAI,
+//! Model access through the `genai` crate, which speaks to Gemini, OpenAI, Grok (SpaceXSI),
 //! Anthropic, Ollama and other providers, including any OpenAI-compatible endpoint.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use genai::adapter::AdapterKind;
 use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatResponseFormat, JsonSpec};
@@ -10,7 +10,9 @@ use genai::{Client, ModelIden, ServiceTarget};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::proposal::{output_schema, parse_response, CommitProposal, ProposalResult};
+use crate::proposal::{
+    extract_json, output_schema, parse_response, CommitProposal, ProposalResult,
+};
 use crate::rules::{parse_rules_response, rules_schema, DerivedRules};
 
 #[derive(Debug, thiserror::Error)]
@@ -82,7 +84,7 @@ pub fn provider_adapter(provider: &str) -> Option<(AdapterKind, &'static str)> {
             (AdapterKind::Gemini, "google")
         }
         "openai" => (AdapterKind::OpenAI, "openai"),
-        "grok" | "xai" => (AdapterKind::Xai, "grok"),
+        "grok" | "xai" | "spacexsi" => (AdapterKind::Xai, "grok"),
         "anthropic" | "claude" => (AdapterKind::Anthropic, "anthropic"),
         "ollama" => (AdapterKind::Ollama, "ollama"),
         "groq" => (AdapterKind::Groq, "groq"),
@@ -120,7 +122,7 @@ pub fn api_key_names(adapter: AdapterKind) -> &'static [&'static str] {
         AdapterKind::Groq => &["GROQ_API_KEY"],
         AdapterKind::DeepSeek => &["DEEPSEEK_API_KEY"],
         AdapterKind::Cohere => &["COHERE_API_KEY"],
-        AdapterKind::OpenRouter => &["OPENROUTER_API_KEY"],
+        AdapterKind::OpenRouter => &["OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY"],
         AdapterKind::Together => &["TOGETHER_API_KEY"],
         AdapterKind::Fireworks => &["FIREWORKS_API_KEY"],
         _ => &[],
@@ -315,13 +317,20 @@ impl LlmClient {
         if let Some(f) = format {
             options = options.with_response_format(f);
         }
+        if matches!(self.model.adapter, AdapterKind::OpenRouter) {
+            // OpenRouter attributes usage to the app named in these headers.
+            options = options.with_extra_headers([
+                ("HTTP-Referer", "https://github.com/kklemon/vibegit"),
+                ("X-Title", "VibeGit"),
+            ]);
+        }
         options
     }
 
     fn formats(&self, spec_name: &str, schema: Value) -> Vec<Option<ChatResponseFormat>> {
         let spec = ChatResponseFormat::JsonSpec(JsonSpec::new(spec_name, schema));
-        if self.model.endpoint.is_some() {
-            // Unknown servers may not implement json_schema; degrade gracefully.
+        if self.model.endpoint.is_some() || matches!(self.model.adapter, AdapterKind::OpenRouter) {
+            // Unknown servers, and many models behind OpenRouter, lack json_schema; degrade gracefully.
             vec![Some(spec), Some(ChatResponseFormat::JsonMode), None]
         } else {
             vec![Some(spec)]
@@ -420,9 +429,98 @@ impl Proposer for LlmProposer {
     }
 }
 
+/// Outcome of the short request `check_model` sends after a model is configured.
+pub struct ModelCheck {
+    pub label: String,
+    pub elapsed: Duration,
+}
+
+/// How long `check_model` waits for the reply; local servers may need to load the model first.
+pub const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Sends one tiny JSON-constrained request through the same path the commit workflow uses,
+/// so a wrong key, model name or endpoint shows up right after configuration instead of on
+/// the first commit. With `VIBEGIT_FAKE_PROPOSER` set it succeeds without network access.
+pub fn check_model(config: &Config) -> Result<ModelCheck, LlmError> {
+    if std::env::var_os("VIBEGIT_FAKE_PROPOSER").is_some() {
+        return Ok(ModelCheck {
+            label: "fake proposer".into(),
+            elapsed: Duration::ZERO,
+        });
+    }
+    let model = resolve_model(config)?;
+    let label = model.label();
+    let mut client = LlmClient::new(model);
+    client.timeout = CHECK_TIMEOUT;
+    let started = Instant::now();
+    client.chat_json(
+        "You are the connectivity check of a command-line tool.",
+        "Reply with a JSON object whose only member is \"ok\" with the value true.",
+        "connectivity_check",
+        serde_json::json!({
+            "type": "object",
+            "properties": {"ok": {"type": "boolean"}},
+            "required": ["ok"]
+        }),
+        &parse_check_reply,
+    )?;
+    Ok(ModelCheck {
+        label,
+        elapsed: started.elapsed(),
+    })
+}
+
+fn parse_check_reply(text: &str) -> Result<(), String> {
+    match extract_json(text)?.get("ok").and_then(Value::as_bool) {
+        Some(true) => Ok(()),
+        _ => Err("expected {\"ok\": true}".into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn response_formats_degrade_for_custom_endpoints_and_openrouter() {
+        let client = |adapter: AdapterKind, endpoint: Option<&str>| {
+            LlmClient::new(ResolvedModel {
+                adapter,
+                provider: "p".into(),
+                model: "m".into(),
+                endpoint: endpoint.map(str::to_string),
+                api_key: None,
+                temperature: None,
+            })
+        };
+        let schema = serde_json::json!({"type": "object"});
+        assert_eq!(
+            client(AdapterKind::Gemini, None)
+                .formats("s", schema.clone())
+                .len(),
+            1
+        );
+        assert_eq!(
+            client(AdapterKind::OpenRouter, None)
+                .formats("s", schema.clone())
+                .len(),
+            3
+        );
+        assert_eq!(
+            client(AdapterKind::OpenAI, Some("http://x/"))
+                .formats("s", schema)
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn check_reply_accepts_only_ok_true() {
+        assert!(parse_check_reply("{\"ok\": true}").is_ok());
+        assert!(parse_check_reply("Sure:\n```json\n{\"ok\":true}\n```").is_ok());
+        assert!(parse_check_reply("{\"ok\": false}").is_err());
+        assert!(parse_check_reply("OK").is_err());
+    }
     use crate::config::ModelConfig;
 
     #[test]
@@ -435,13 +533,13 @@ mod tests {
         assert_eq!(r.label(), "google:gemini-3.8-flash");
         assert_eq!(r.api_key.as_deref(), Some("g"));
 
-        config.model.name = "xai:grok-code-fast-1".into();
+        config.model.name = "spacexsi:grok-4.7".into();
         config.api_keys.insert("XAI_API_KEY".into(), "x".into());
         let r = resolve_model(&config).unwrap();
         assert_eq!(r.adapter, AdapterKind::Xai);
         assert_eq!(r.api_key.as_deref(), Some("x"));
 
-        config.model.name = "openai:gpt-5.6-terra".into();
+        config.model.name = "openai:gpt-6.1-terra".into();
         let err = resolve_model(&config).unwrap_err().to_string();
         assert!(err.contains("OPENAI_API_KEY"));
 

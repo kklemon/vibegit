@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::config::{config_path, Config};
 use crate::git::{CommitMode, GitRepo};
-use crate::llm::{resolve_model, FakeProposer, LlmProposer, Proposer};
+use crate::llm::{check_model, resolve_model, FakeProposer, LlmProposer, Proposer};
 use crate::proposal::ProposalResult;
 use crate::tui;
 use crate::update::check_for_update;
@@ -93,8 +93,10 @@ enum ConfigAction {
     Show,
     /// Print one value, e.g. `model.name`
     Get { path: String },
-    /// Set one value, e.g. `model.name openai:gpt-5.6-terra`; use `none` to clear optional values
+    /// Set one value, e.g. `model.name openai:gpt-6.1-terra`; use `none` to clear optional values
     Set { path: String, value: String },
+    /// Send a short test request to the configured model
+    Test,
     /// Print the configuration file path
     Path,
     /// Open the configuration file in your editor
@@ -410,6 +412,13 @@ fn run_config(action: Option<ConfigAction>) -> Result<i32> {
             config.set(&key, &value)?;
             config.save()?;
             println!("Set {key}");
+            if key.starts_with("model.") || key.starts_with("api_keys.") {
+                return run_model_check(&config);
+            }
+        }
+        Some(ConfigAction::Test) => {
+            let (config, _) = Config::load()?;
+            return run_model_check(&config);
         }
         Some(ConfigAction::Path) => println!("{}", path.display()),
         Some(ConfigAction::Open) => {
@@ -421,6 +430,26 @@ fn run_config(action: Option<ConfigAction>) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+/// Sends the test request to the configured model and reports the outcome.
+fn run_model_check(config: &Config) -> Result<i32> {
+    print!("Testing the configured model... ");
+    io::stdout().flush()?;
+    match check_model(config) {
+        Ok(check) => {
+            println!(
+                "ok: {} answered in {:.1}s.",
+                check.label,
+                check.elapsed.as_secs_f64()
+            );
+            Ok(0)
+        }
+        Err(err) => {
+            println!("failed.");
+            bail!("{err}\n\nThe settings are saved; fix them with `vibegit config` or `vibegit config set`, then run `vibegit config test`.")
+        }
+    }
 }
 
 /// Opens a file with `$VISUAL`/`$EDITOR`, falling back to the platform opener.
