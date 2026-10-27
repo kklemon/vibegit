@@ -62,6 +62,8 @@ pub enum Row {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Confirm {
     CommitAll(usize),
+    /// Commit all pending proposals, then push.
+    CommitAllAndPush(usize),
     Push,
     Rerun,
     QuitWithPending,
@@ -71,6 +73,7 @@ impl Confirm {
     fn flag(self, confirmations: &mut Confirmations) -> &mut bool {
         match self {
             Confirm::CommitAll(_) => &mut confirmations.commit_all,
+            Confirm::CommitAllAndPush(_) => &mut confirmations.commit_all_and_push,
             Confirm::Push => &mut confirmations.push,
             Confirm::Rerun => &mut confirmations.rerun,
             Confirm::QuitWithPending => &mut confirmations.quit,
@@ -80,6 +83,7 @@ impl Confirm {
     pub fn config_key(self) -> &'static str {
         match self {
             Confirm::CommitAll(_) => "confirmations.commit_all",
+            Confirm::CommitAllAndPush(_) => "confirmations.commit_all_and_push",
             Confirm::Push => "confirmations.push",
             Confirm::Rerun => "confirmations.rerun",
             Confirm::QuitWithPending => "confirmations.quit",
@@ -107,6 +111,7 @@ pub enum Overlay {
 pub enum Action {
     Commit,
     CommitAll,
+    CommitAllAndPush,
     Edit,
     EditExternal,
     Skip,
@@ -124,6 +129,7 @@ impl Action {
     pub const MENU: &'static [Action] = &[
         Action::Commit,
         Action::CommitAll,
+        Action::CommitAllAndPush,
         Action::Edit,
         Action::EditExternal,
         Action::Diff,
@@ -141,6 +147,7 @@ impl Action {
         match self {
             Action::Commit => "Commit this proposal",
             Action::CommitAll => "Commit all pending proposals",
+            Action::CommitAllAndPush => "Commit all pending proposals, then push",
             Action::Edit => "Edit commit message",
             Action::EditExternal => "Edit commit message in $EDITOR",
             Action::Diff => "Show diff",
@@ -159,6 +166,7 @@ impl Action {
         match self {
             Action::Commit => "c",
             Action::CommitAll => "C",
+            Action::CommitAllAndPush => "P",
             Action::Edit => "e",
             Action::EditExternal => "E",
             Action::Diff => "d / Enter",
@@ -231,6 +239,8 @@ pub struct App {
     pub commits: Vec<CommitRecord>,
     pub leftover: Option<Leftover>,
     pub push_status: Option<String>,
+    /// Set by "commit all and push": push once the apply run finishes cleanly.
+    push_after_apply: bool,
     pub instruction: Option<String>,
     pub apply_log: Vec<String>,
     pub menu_index: usize,
@@ -285,6 +295,7 @@ impl App {
             commits: Vec::new(),
             leftover: None,
             push_status: None,
+            push_after_apply: false,
             instruction,
             apply_log: Vec::new(),
             menu_index: 0,
@@ -502,8 +513,13 @@ impl App {
                     .proposals
                     .iter()
                     .any(|p| matches!(p.status, ProposalStatus::Failed(_)));
+                let push = std::mem::take(&mut self.push_after_apply);
                 if failed {
-                    self.status = "A commit failed; see the proposal for details. Remaining proposals were not applied.".into();
+                    self.status = if push {
+                        "A commit failed; see the proposal for details. Remaining proposals were not applied and nothing was pushed.".into()
+                    } else {
+                        "A commit failed; see the proposal for details. Remaining proposals were not applied.".into()
+                    };
                 } else if self.pending_count() == 0
                     && !self
                         .proposals
@@ -514,6 +530,9 @@ impl App {
                     self.screen = Screen::Summary;
                 } else {
                     self.status = format!("{} proposal(s) still pending.", self.pending_count());
+                }
+                if push && !failed && !self.commits.is_empty() {
+                    self.start_push();
                 }
             }
             Evt::PushResult(result) => {
@@ -662,11 +681,13 @@ impl App {
     fn execute(&mut self, kind: Confirm) {
         match kind {
             Confirm::CommitAll(_) => self.commit_all(),
-            Confirm::Push => {
-                self.busy = true;
-                self.status = "Pushing...".into();
-                self.effects.push(Effect::Send(Cmd::Push));
+            Confirm::CommitAllAndPush(_) => {
+                if self.pending_count() > 0 {
+                    self.push_after_apply = true;
+                    self.commit_all();
+                }
             }
+            Confirm::Push => self.start_push(),
             Confirm::Rerun => self.regenerate(),
             Confirm::QuitWithPending => self.screen = Screen::Summary,
         }
@@ -792,6 +813,7 @@ impl App {
             KeyCode::Enter | KeyCode::Char('d') => self.run_action(Action::Diff),
             KeyCode::Char('c') => self.run_action(Action::Commit),
             KeyCode::Char('C') | KeyCode::Char('a') => self.run_action(Action::CommitAll),
+            KeyCode::Char('P') => self.run_action(Action::CommitAllAndPush),
             KeyCode::Char('e') => self.run_action(Action::Edit),
             KeyCode::Char('E') => self.run_action(Action::EditExternal),
             KeyCode::Char('s') => self.run_action(Action::Skip),
@@ -929,6 +951,12 @@ impl App {
                         "Commit all",
                         "C",
                         Char('C'),
+                        !busy && self.pending_count() > 0,
+                    ),
+                    button(
+                        "Commit all & push",
+                        "P",
+                        Char('P'),
                         !busy && self.pending_count() > 0,
                     ),
                     button("Edit", "e", Char('e'), !busy && editable),
@@ -1244,12 +1272,14 @@ impl App {
                     self.status = "Excluded groups cannot be committed; regenerate with an instruction if they should be.".into();
                 }
             }
-            Action::CommitAll => {
+            Action::CommitAll | Action::CommitAllAndPush => {
                 let pending = self.pending_count();
                 if pending == 0 {
                     self.status = "Nothing pending to commit.".into();
-                } else {
+                } else if action == Action::CommitAll {
                     self.confirm(Confirm::CommitAll(pending));
+                } else {
+                    self.confirm(Confirm::CommitAllAndPush(pending));
                 }
             }
             Action::Edit => {
@@ -1346,6 +1376,12 @@ impl App {
     fn commit_all(&mut self) {
         let indices = self.pending_indices();
         self.apply_indices(indices);
+    }
+
+    fn start_push(&mut self) {
+        self.busy = true;
+        self.status = "Pushing...".into();
+        self.effects.push(Effect::Send(Cmd::Push));
     }
 
     fn apply_indices(&mut self, indices: Vec<usize>) {

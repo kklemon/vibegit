@@ -27,6 +27,7 @@ pub struct Config {
 #[serde(default)]
 pub struct Confirmations {
     pub commit_all: bool,
+    pub commit_all_and_push: bool,
     pub push: bool,
     pub rerun: bool,
     pub quit: bool,
@@ -39,6 +40,7 @@ impl Default for Confirmations {
     fn default() -> Self {
         Self {
             commit_all: true,
+            commit_all_and_push: true,
             push: true,
             rerun: true,
             quit: true,
@@ -282,6 +284,9 @@ impl Config {
             "allow_excluding_changes" => self.allow_excluding_changes = parse_bool(path, value)?,
             "watermark" => self.watermark = parse_bool(path, value)?,
             "confirmations.commit_all" => self.confirmations.commit_all = parse_bool(path, value)?,
+            "confirmations.commit_all_and_push" => {
+                self.confirmations.commit_all_and_push = parse_bool(path, value)?
+            }
             "confirmations.push" => self.confirmations.push = parse_bool(path, value)?,
             "confirmations.rerun" => self.confirmations.rerun = parse_bool(path, value)?,
             "confirmations.quit" => self.confirmations.quit = parse_bool(path, value)?,
@@ -344,6 +349,7 @@ pub const KNOWN_PATHS: &[&str] = &[
     "allow_excluding_changes",
     "watermark",
     "confirmations.commit_all",
+    "confirmations.commit_all_and_push",
     "confirmations.push",
     "confirmations.rerun",
     "confirmations.quit",

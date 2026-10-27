@@ -237,7 +237,7 @@ fn button_bar_focus_navigation_and_activation() {
     assert_eq!(app.focus, None);
     app.on_key(key(KeyCode::Tab));
     assert_eq!(app.focus, Some(0), "Tab focuses the first enabled button");
-    for _ in 0..3 {
+    for _ in 0..4 {
         app.on_key(key(KeyCode::Right));
     }
     assert_eq!(app.buttons()[app.focus.unwrap()].label, "Diff");
@@ -317,7 +317,7 @@ fn button_bar_renders_and_wraps() {
     );
     app.on_event(Evt::Proposals(snapshot()));
     app.on_key(key(KeyCode::Tab));
-    for (width, expected_rows) in [(120u16, 1usize), (60, 2)] {
+    for (width, expected_rows) in [(140u16, 1usize), (120, 2), (60, 3)] {
         let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
         terminal.draw(|f| ui::render(f, &mut app)).unwrap();
         let buf = terminal.backend().buffer();
@@ -336,7 +336,7 @@ fn button_bar_renders_and_wraps() {
         assert!(joined.contains(" C Commit all ") && joined.contains(" q Quit "));
         let bar_rows = bottom
             .iter()
-            .filter(|l| l.contains(" Commit ") || l.contains(" Quit "))
+            .filter(|l| l.contains(" Commit ") || l.contains(" Diff ") || l.contains(" Quit "))
             .count();
         assert_eq!(bar_rows, expected_rows, "{joined}");
     }
@@ -447,4 +447,94 @@ fn commit_mode_offers_rules_and_can_decline_forever() {
     assert!(!app.should_quit);
     app.on_event(Evt::Proposals(snapshot()));
     assert_eq!(app.screen, Screen::Proposals);
+}
+
+#[test]
+fn commit_all_and_push_pushes_after_a_clean_apply() {
+    let mut app = App::new(
+        "r".into(),
+        "m".into(),
+        None,
+        false,
+        Confirmations::default(),
+    );
+    app.on_event(Evt::Proposals(snapshot()));
+    app.on_key(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT));
+    assert!(matches!(
+        app.overlay,
+        Overlay::Confirm(Confirm::CommitAllAndPush(3))
+    ));
+    draw(&mut app, 80, 24);
+    app.on_key(key(KeyCode::Char('y')));
+    assert!(matches!(app.overlay, Overlay::Applying));
+    let effects = app.take_effects();
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, Effect::Send(Cmd::Apply(items)) if items.len() == 3)));
+    for i in 0..3 {
+        app.on_event(Evt::Committed {
+            index: i,
+            sha: format!("sha{i}"),
+            subject: format!("commit number {i}"),
+        });
+    }
+    app.on_event(Evt::ApplyFinished(Leftover::default()));
+    assert_eq!(app.screen, Screen::Summary);
+    assert!(app.busy, "push must start right after the commits");
+    assert!(app.status.starts_with("Pushing"));
+    let effects = app.take_effects();
+    assert!(effects.iter().any(|e| matches!(e, Effect::Send(Cmd::Push))));
+    draw(&mut app, 80, 24);
+    app.on_event(Evt::PushResult(Ok(String::new())));
+    assert!(!app.busy);
+    assert_eq!(app.status, "pushed");
+    draw(&mut app, 80, 24);
+}
+
+#[test]
+fn commit_all_and_push_skips_the_push_after_a_failure() {
+    let confirmations = Confirmations {
+        commit_all_and_push: false,
+        ..Confirmations::default()
+    };
+    let mut app = App::new("r".into(), "m".into(), None, false, confirmations);
+    app.on_event(Evt::Proposals(snapshot()));
+    app.on_key(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT));
+    assert!(
+        matches!(app.overlay, Overlay::Applying),
+        "no dialog when disabled"
+    );
+    app.take_effects();
+    app.on_event(Evt::Committed {
+        index: 0,
+        sha: "sha0".into(),
+        subject: "commit number 0".into(),
+    });
+    app.on_event(Evt::ApplyFailed {
+        index: 1,
+        error: "hook".into(),
+    });
+    app.on_event(Evt::ApplyFinished(Leftover::default()));
+    assert!(!app.busy);
+    assert!(app.status.contains("nothing was pushed"), "{}", app.status);
+    assert!(!app
+        .take_effects()
+        .iter()
+        .any(|e| matches!(e, Effect::Send(Cmd::Push))));
+    // Retrying the failed proposal later must not push either.
+    app.on_key(key(KeyCode::Down));
+    app.on_key(key(KeyCode::Char('c')));
+    assert!(matches!(app.overlay, Overlay::Applying));
+    app.on_event(Evt::Committed {
+        index: 1,
+        sha: "sha1".into(),
+        subject: "commit number 1".into(),
+    });
+    app.on_event(Evt::ApplyFinished(Leftover::default()));
+    assert!(!app.busy);
+    assert!(!app
+        .take_effects()
+        .iter()
+        .any(|e| matches!(e, Effect::Send(Cmd::Push))));
+    draw(&mut app, 80, 24);
 }

@@ -559,6 +559,9 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 Confirm::CommitAll(n) => {
                     format!("Commit all {n} pending proposal(s) in list order?")
                 }
+                Confirm::CommitAllAndPush(n) => {
+                    format!("Commit all {n} pending proposal(s) in list order, then push?")
+                }
                 Confirm::Push => "Push the new commits to the remote?".to_string(),
                 Confirm::Rerun => {
                     "Discard the current proposals and generate new ones?".to_string()
@@ -623,6 +626,7 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 ("Enter / d", "show the diff of the selection"),
                 ("c", "stage and commit the selected proposal"),
                 ("C / a", "commit all pending proposals"),
+                ("P", "commit all pending proposals, then push"),
                 ("e", "edit the commit message in place"),
                 ("E", "edit the commit message in $EDITOR"),
                 ("s", "skip or unskip a proposal"),
