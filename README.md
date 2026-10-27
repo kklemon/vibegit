@@ -40,7 +40,7 @@ VibeGit is a single native binary that drives the `git` command line. It never m
 
 * **Semantic grouping** of related hunks into commits, including changes that span several files.
 * **Generated messages** that follow the style of the repository, guided by a `.vibegitrules` file derived from your own history.
-* **Interactive review** with a diff viewer, in-place or `$EDITOR` message editing, reordering, skipping, and a button bar with mouse support; press `?` for all keys.
+* **Interactive review** with a diff viewer, in-place or `$EDITOR` message editing, reordering, skipping, commit-and-push in one step, and a button bar with mouse support; press `?` for all keys.
 * **Change exclusions:** changes that look unfinished or sensitive are set aside and shown separately, never committed silently.
 * **Many providers:** Google Gemini, OpenAI, xAI Grok, Anthropic, Ollama, Groq, DeepSeek and others, plus any OpenAI-compatible endpoint.
 * **Robust git handling:** binaries, mode changes, symlinks, submodules, CRLF, unicode paths, detached and unborn HEAD, and unusual `diff.*` configuration all work; merges in progress and conflicts are refused before anything is written.
