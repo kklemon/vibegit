@@ -590,6 +590,28 @@ fn failing_pre_commit_hook_leaves_index_clean() {
 }
 
 #[test]
+fn index_lock_held_briefly_by_another_process() {
+    // Editors and git clients re-scan the repository after each commit; their
+    // `git status` holds `index.lock` for a moment. The commit must wait, not fail.
+    let sb = Sandbox::with_initial_commit();
+    sb.edit_line("base.txt", 5, "changed 5");
+    sb.write("new.txt", b"new\n");
+    let lock = sb.root.join(".git/index.lock");
+    fs::write(&lock, "").unwrap();
+    let holder = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        fs::remove_file(lock).unwrap();
+    });
+    let wf = sb.workflow(false);
+    let count = run_pipeline(&wf).unwrap();
+    holder.join().unwrap();
+    assert_eq!(count, 2);
+    assert_eq!(sb.status().trim(), "");
+    sb.git(&["diff", "HEAD", "--exit-code", "--quiet"]);
+    assert!(!sb.root.join(".git/index.lock").exists());
+}
+
+#[test]
 fn works_from_subdirectory_and_linked_worktree() {
     let sb = Sandbox::with_initial_commit();
     sb.write("subdir/new.txt", b"x\n");
