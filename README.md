@@ -73,7 +73,7 @@ vibegit commit --yolo [--push] [--unstage]           # apply every proposal with
 vibegit commit --debug                               # dump prompts and responses to $TMPDIR/vibegit-debug
 ```
 
-**`vibegit init`** analyses the last `init.commits` commits (messages and abbreviated diffs), derives the project's conventions into `.vibegitrules`, and shows the result for review before writing it. `--yes` skips the review, `--print` prints instead of writing, `--template` writes the bundled template, `-n N` changes the number of commits, `--force` replaces an existing file.
+**`vibegit init`** analyzes the last `init.commits` commits (messages and abbreviated diffs), derives the project's conventions into `.vibegitrules`, and shows the result for review before writing it. `--yes` skips the review, `--print` prints instead of writing, `--template` writes the bundled template, `-n N` changes the number of commits, `--force` replaces an existing file.
 
 **`vibegit config`** runs the setup wizard; `show`, `get <path>`, `set <path> <value>`, `path` and `open` manage the file directly, for example:
 
@@ -88,7 +88,7 @@ The file lives in the platform configuration directory (`~/Library/Application S
 
 Models use the `<provider>:<model>` format, with `google:gemini-3.8-flash` as the default. Keys are read from the `api_keys` table or the usual environment variables (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, `GROK_API_KEY`, `ANTHROPIC_API_KEY`, ...). Any OpenAI-compatible server works through `model.base_url` and `model.api_key`.
 
-Other settings: `allow_excluding_changes`, `watermark`, `context_formatting.*` (branch, recent commits, line truncation, size cap), `init.*` (commits analysed and diff detail for `vibegit init`), and `confirmations.*`. Each confirmation dialog has a "don't ask again" choice that is stored there. Run `vibegit config show` to see every setting with its current value.
+Other settings: `allow_excluding_changes`, `watermark`, `context_formatting.*` (branch, recent commits, line truncation, size cap), `init.*` (commits analyzed and diff detail for `vibegit init`), and `confirmations.*`. Each confirmation dialog has a "don't ask again" choice that is stored there. Run `vibegit config show` to see every setting with its current value.
 
 ## Project rules
 

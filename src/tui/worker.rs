@@ -23,7 +23,7 @@ pub enum Cmd {
     Begin,
     /// The user agreed to unstage; continue with the rest of `Begin`.
     Unstage,
-    /// Analyse the history and derive `.vibegitrules`.
+    /// Analyze the history and derive `.vibegitrules`.
     DeriveRules,
     /// Write `.vibegitrules`; `then_generate` continues with the commit workflow.
     WriteRules {

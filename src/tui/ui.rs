@@ -669,7 +669,7 @@ fn render_overlay(frame: &mut Frame, app: &mut App, area: Rect) {
                 Line::from("  No .vibegitrules found in this repository."),
                 Line::from(""),
                 Line::from(format!(
-                    "  VibeGit can analyse the last {commits} commit(s) and derive this project's"
+                    "  VibeGit can analyze the last {commits} commit(s) and derive this project's"
                 )),
                 Line::from("  commit conventions (message style, granularity, grouping) into a"),
                 Line::from("  .vibegitrules file, which you review before it is written."),

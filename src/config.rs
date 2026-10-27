@@ -50,11 +50,11 @@ impl Default for Confirmations {
     }
 }
 
-/// How much history `vibegit init` analyses to derive `.vibegitrules`.
+/// How much history `vibegit init` analyzes to derive `.vibegitrules`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct InitConfig {
-    /// Number of recent non-merge commits to analyse.
+    /// Number of recent non-merge commits to analyze.
     pub commits: usize,
     /// Files shown per commit; the rest are listed by name only.
     pub max_files_per_commit: usize,

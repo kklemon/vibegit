@@ -36,7 +36,7 @@ pub const RULES_SYSTEM_PROMPT: &str = r#"You are an expert in software engineeri
 
 That file is read by an AI assistant which turns a developer's uncommitted changes into a series of commits: it groups related hunks and writes a commit message for each group. The rules must tell that assistant, concretely and briefly, how commits in this repository should look and how changes should be grouped.
 
-Analyse the history along these dimensions:
+Analyze the history along these dimensions:
 
 1. **Message format:** structure of the subject line (prefixes such as Conventional Commits types, scopes, ticket references, emoji), capitalisation, mood (imperative or past tense), typical length, trailing punctuation, language; whether bodies or trailers are used and what they contain.
 2. **Granularity:** how much a commit typically contains (one small logical change, a whole feature, mixed concerns) and whether tests, documentation, formatting, dependency or configuration changes ship together with the code they relate to or separately.

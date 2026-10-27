@@ -76,10 +76,10 @@ pub struct InitArgs {
     /// Print the derived rules instead of writing them
     #[arg(long)]
     pub print: bool,
-    /// Write VibeGit's static template instead of analysing the history
+    /// Write VibeGit's static template instead of analyzing the history
     #[arg(long)]
     pub template: bool,
-    /// Number of recent commits to analyse (default: init.commits from the config)
+    /// Number of recent commits to analyze (default: init.commits from the config)
     #[arg(short = 'n', long, value_name = "N")]
     pub commits: Option<usize>,
     /// Write prompts and responses to a debug directory
