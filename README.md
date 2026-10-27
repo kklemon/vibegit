@@ -42,7 +42,7 @@ VibeGit is a single native binary that drives the `git` command line. It never m
 * **Generated messages** that follow the style of the repository, guided by a `.vibegitrules` file derived from your own history.
 * **Interactive review** with a diff viewer, in-place or `$EDITOR` message editing, reordering, skipping, commit-and-push in one step, and a button bar with mouse support; press `?` for all keys.
 * **Change exclusions:** changes that look unfinished or sensitive are set aside and shown separately, never committed silently.
-* **Many providers:** Google Gemini, OpenAI, xAI Grok, Anthropic, Ollama, Groq, DeepSeek and others, plus any OpenAI-compatible endpoint.
+* **Many providers:** Google Gemini, OpenAI, Anthropic Claude, Grok from SpaceXSI (formerly xAI), any model on OpenRouter with one key, Ollama, Groq, DeepSeek and others, plus any OpenAI-compatible endpoint.
 * **Robust git handling:** binaries, mode changes, symlinks, submodules, CRLF, unicode paths, detached and unborn HEAD, and unusual `diff.*` configuration all work; merges in progress and conflicts are refused before anything is written.
 
 ## Installation
@@ -75,10 +75,10 @@ vibegit commit --debug                               # dump prompts and response
 
 **`vibegit init`** analyzes the last `init.commits` commits (messages and abbreviated diffs), derives the project's conventions into `.vibegitrules`, and shows the result for review before writing it. `--yes` skips the review, `--print` prints instead of writing, `--template` writes the bundled template, `-n N` changes the number of commits, `--force` replaces an existing file.
 
-**`vibegit config`** runs the setup wizard; `show`, `get <path>`, `set <path> <value>`, `path` and `open` manage the file directly, for example:
+**`vibegit config`** runs the setup wizard, which ends with a short test request to the chosen model. `test` repeats that check; `show`, `get <path>`, `set <path> <value>`, `path` and `open` manage the file directly, and `set` re-runs the check after model or key changes. For example:
 
 ```bash
-vibegit config set model.name openai:gpt-5.6-terra
+vibegit config set model.name openai:gpt-6.1-terra
 vibegit config set api_keys.OPENAI_API_KEY sk-...
 ```
 
@@ -86,7 +86,7 @@ vibegit config set api_keys.OPENAI_API_KEY sk-...
 
 The file lives in the platform configuration directory (`~/Library/Application Support/vibegit/config.toml` on macOS, `~/.config/vibegit/config.toml` on Linux); `VIBEGIT_CONFIG_PATH` overrides it. Files from VibeGit 0.2 are read unchanged.
 
-Models use the `<provider>:<model>` format, with `google:gemini-3.8-flash` as the default. Keys are read from the `api_keys` table or the usual environment variables (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, `GROK_API_KEY`, `ANTHROPIC_API_KEY`, ...). Any OpenAI-compatible server works through `model.base_url` and `model.api_key`.
+Models use the `<provider>:<model>` format, with `google:gemini-3.8-flash` as the default. Keys are read from the `api_keys` table or the usual environment variables (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, ...). `openrouter:<vendor>/<model>` with `OPENROUTER_API_KEY` reaches any model on OpenRouter; the wizard searches its catalog. Any OpenAI-compatible server works through `model.base_url` and `model.api_key`.
 
 Other settings: `allow_excluding_changes`, `watermark`, `context_formatting.*` (branch, recent commits, line truncation, size cap), `init.*` (commits analyzed and diff detail for `vibegit init`), and `confirmations.*`. Each confirmation dialog has a "don't ask again" choice that is stored there. Run `vibegit config show` to see every setting with its current value.
 
